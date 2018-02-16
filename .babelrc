@@ -1,0 +1,24 @@
+{
+    "presets": [
+        [
+            "env",
+            {
+                "node": 6
+            }
+        ]
+    ],
+
+    "plugins": [
+        "transform-runtime",
+        "transform-flow-strip-types",
+        "transform-object-rest-spread"
+    ],
+    "env": {
+        // jest needs this
+        "test": {
+            "plugins": [
+                "transform-es2015-modules-commonjs"
+            ]
+        }
+    }
+}

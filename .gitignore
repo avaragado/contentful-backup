@@ -1,0 +1,5 @@
+node_modules/
+/dist/
+/flow-coverage/
+/coverage/
+npm-debug.log

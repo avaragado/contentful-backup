@@ -1,0 +1,71 @@
+{
+  "name": "@avaragado/contentful-backup",
+  "version": "0.1.0",
+  "description": "A console app and node module for backing up Contentful spaces",
+  "keywords": [
+    "contentful",
+    "backup",
+    "console",
+    "cli",
+    "terminal",
+    "library"
+  ],
+  "main": "./dist/index.js",
+  "bin": {
+    "contentful-backup": "./dist/bin/cli-shim.js"
+  },
+  "files": [
+    "dist/",
+    "doc/"
+  ],
+  "homepage": "https://github.com/avaragado/contentful-backup#readme",
+  "repository": "avaragado/contentful-backup",
+  "bugs": "https://github.com/avaragado/contentful-backup/issues",
+  "author": {
+    "name": "David Smith",
+    "email": "contentful-backup@avaragado.org",
+    "url": "https://avaragado.org"
+  },
+  "license": "MIT",
+  "scripts": {
+    "start": "nps"
+  },
+  "devDependencies": {
+    "babel-cli": "^6.24.1",
+    "babel-eslint": "^8.0.1",
+    "babel-plugin-transform-es2015-modules-commonjs": "^6.24.1",
+    "babel-plugin-transform-flow-strip-types": "^6.22.0",
+    "babel-plugin-transform-object-rest-spread": "^6.23.0",
+    "babel-plugin-transform-runtime": "^6.23.0",
+    "babel-preset-env": "^1.3.3",
+    "concurrently": "^3.4.0",
+    "eslint": "^4.7.2",
+    "eslint-config-airbnb": "^16.1.0",
+    "eslint-plugin-flowtype": "^2.30.4",
+    "eslint-plugin-import": "^2.2.0",
+    "eslint-plugin-jsx-a11y": "^6.0.2",
+    "eslint-plugin-react": "^7.4.0",
+    "flow-bin": "^0.66.0",
+    "flow-copy-source": "^1.1.0",
+    "flow-coverage-report": "^0.4.1",
+    "flow-typed": "^2.0.0",
+    "nps": "^5.0.5",
+    "standard-version": "^4.0.0"
+  },
+  "dependencies": {
+    "babel-core": "^6.24.1",
+    "babel-polyfill": "^6.23.0",
+    "babel-runtime": "^6.23.0",
+    "bardot": "^0.2.1",
+    "chalk": "^2.1.0",
+    "contentful": "^5.1.1",
+    "fallback-cli": "^2.0.2",
+    "glob": "^7.1.1",
+    "mkdirp": "^0.5.1",
+    "node-fetch": "^2.0.0",
+    "ora": "^1.2.0",
+    "outdent": "^0.4.1",
+    "rimraf": "^2.6.2",
+    "yargs": "^11.0.0"
+  }
+}
