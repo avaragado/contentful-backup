@@ -9,14 +9,9 @@ import type { ContentfulClientApi } from 'contentful';
 import { createClient } from 'contentful';
 import mkdirp from 'mkdirp';
 
+import type { BackupSpec } from '../';
 import * as synctoken from './synctoken';
 import { process } from './process';
-
-type BackupSpec = {
-    dir: string,
-    space: string,
-    token: string,
-}
 
 const writeFile = promisify(fs.writeFile);
 const mkdir = promisify(mkdirp);
@@ -61,7 +56,7 @@ class ContentfulBackup extends EventEmitter {
         this.emit('afterContentTypes', response);
     }
 
-    async backup ({ dir, space, token }: BackupSpec) {
+    async backupSpace ({ dir, space, token }: { dir: string, space: string, token: string }) {
         this.emit('start', { dir, space, token });
 
         const cfClient = createClient({ space, accessToken: token });
@@ -78,6 +73,18 @@ class ContentfulBackup extends EventEmitter {
         } catch (err) {
             this.emit('error', err);
         }
+    }
+
+    async backup ({ dir, spaces }: BackupSpec) {
+        if (spaces.length === 0) {
+            return true;
+        }
+
+        const [{ id: space, token }, ...spacesRest] = spaces;
+
+        await this.backupSpace({ dir, space, token });
+
+        return this.backup({ dir, spaces: spacesRest });
     }
 }
 

@@ -9,9 +9,10 @@
 - Space metadata
 - Content type metadata
 
-It supports incremental backup of entries and assets, so you can run the app frequently to keep the backup "topped up".
+It supports incremental backup of entries and assets, so you can run the app frequently to keep the backup "topped up". You can back up one or more spaces with a single run of the tool.
 
 **Files are deleted locally too.** When entries or assets are deleted from Contentful, `contentful-backup` removes the associated files from the local backup. To recover entries or assets accidentally deleted on Contentful, we recommend you use `contentful-backup` in conjunction with your favourite version control system. For example: run `contentful-backup`, then commit any changes made to git. (Some _mirror-my-disk-to-a-cloud_ services might work too, if they let you time travel and if they haven't silently crashed.)
+
 
 ## Caveats
 
@@ -31,20 +32,47 @@ $ npm -g install @avaragado/contentful-backup
 
 ## Usage
 
-```bash
-$ contentful-backup [--dir <target-dir>] [--space <space-id>] [--token <cda-token>]
-```
-
-Backs up a space into the target directory (which must already exist, and defaults to the current directory). If you omit either `--space` or `--token` or both, the tool looks for them in the node module `contentful-backup.config.js` in the target directory, which must export `space` and/or `token`. (This can alternatively be a plain JSON file, `contentful-backup.config.json`.)
-
-
-### Example
+### Back up a single space
 
 ```bash
-$ contentful-backup --space abcdabcdabcd
+$ contentful-backup [--dir <target-dir>] --space <space-id> --token <cda-token>
 ```
 
-Backs up space `abcdabcdabcd` to the current directory, using a CDA token from a configuration file in the current directory.
+Backs up the space into the target directory (which must already exist, and defaults to the current directory). The token must be a valid Content Delivery API token for the space.
+
+
+### Back up one or more spaces
+
+```bash
+$ contentful-backup [--dir <target-dir>]
+```
+
+Backs up all the spaces defined in a configuration file in the target directory (which defaults to the current directory). The configuration file is named either `contentful-backup.config.js` or `contentful-backup.config.json`. The configuration file must export or define an array `spaces`. Each member of the array must be an object with key `id`, identifying a space, and key `token`, for the associated CDA token.
+
+Example configuration file `contentful-backup.config.json`:
+
+```json
+{
+    "spaces": [
+        { "id": "abcdabcdabcd", "token": "abcdabcdabcdabcdabcdabcd" },
+        { "id": "zxzxzxzxzxzx", "token": "zxzxzxzxzxzxzxzxzxzxzxzx" },
+    ]
+}
+```
+
+### Examples
+
+```bash
+$ contentful-backup --space abcdabcdabcd --token abcdefg
+```
+
+Backs up space `abcdabcdabcd` to the current directory, using the CDA token `abcdefg`.
+
+```bash
+$ contentful-backup --dir ../my-backups
+```
+
+Backs up spaces according to the configuration file in `../my-backups`.
 
 
 ### Files written
@@ -60,15 +88,13 @@ Backs up space `abcdabcdabcd` to the current directory, using a CDA token from a
 | `<space-id>/entry/<id>/data.json` | Data for a single entry |
 | `<space-id>/nextSyncToken.txt` | The Contentful token indicating the most recent successful synchronisation |
 
-Because `contentful-backup` puts everything in a `<space-id>` subdirectory of the target directory, you can back up several spaces in the same target directory. (But note that a target directory's configuration file only exports one space id and one token: if you want to back up multiple spaces to the same target directory, use command-line options instead of a configuration file.)
-
 
 ### Errors
 
 Any error that occurs during a backup, for example a network failure, stops the backup at that point. This might not be too much of a problem: simply run `contentful-backup` again.
 
 - If an error occurs before synchronisation is complete, the script doesn't save the next synchronisation token. This means the next run of the script reruns the synchronisation that failed (in other words, you shouldn't lose anything).
-- If you don't trust a particular incremental backup, remove the `<space-id>` subdirectory of the target directory and run `contentful-backup` again: you'll get a full backup.
+- If you don't trust a particular incremental backup, remove the `<space-id>` subdirectory of the target directory and run `contentful-backup` again: you'll get a full backup of that space.
 
 
 ## Node module usage
@@ -86,7 +112,13 @@ cfb.on('syncProgress', ({ done, total } => {
     console.log(`Synchronised ${done}/${total}`);
 }));
 
-cfb.backup({ dir, space, token });
+cfb.backup({
+    dir: 'my-dir',
+    spaces: [
+        { id: 'abcabcabc', token: 'vbvbvb' },
+        { id: 'zxzxzxzx', token: 'cnxncnxn' },
+    ],
+});
 ```
 
 ### Events

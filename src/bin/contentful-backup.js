@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 // @flow
 
-import fs from 'fs';
 import path from 'path';
 
 import 'babel-polyfill';
@@ -10,97 +9,73 @@ import outdent from 'outdent';
 import ora from 'ora';
 import { bardot } from 'bardot';
 
+import type { Space, Config, BackupSpec } from '../';
 import { ContentfulBackup } from '../';
 
 const relpathConfig = 'contentful-backup.config';
 
 const { argv } = yargs
     .usage(outdent`
-        $0 [--dir <target>] [--space <id>] [--token <token>]
+        $0 [--dir <target>] [--space <id> --token <cda-token>]
 
-        Backs up the Contentful space into the target directory, using the
-        Content Delivery API token.
+        Backs up one or more Contentful spaces into the target directory.
 
         If you omit --dir, assumes the target directory is the current directory.
 
-        If you omit --space and/or --token, reads them from ${relpathConfig}.{js,json}
-        in the target directory.
+        If you specify --space and --token, backs up just this space.
+
+        If you omit --space and --token, reads them from the 'spaces' key in
+        ${relpathConfig}.{js,json} in the target directory.
     `)
     .example(
-        '$0 --space abcdabcdabcd',
-        'Backs up space abcdabcdabcd to the current directory, using a CDA token from a configuration file in the current directory.',
+        '$0 --space abcdabcdabcd --token abcdefg',
+        'Backs up space abcdabcdabcd to the current directory, using the CDA token supplied.',
+    )
+    .example(
+        '$0 --dir ../my-backups',
+        'Backs up spaces according to the configuration file in ../my-backups',
     )
     .options({
         'dir': {
             desc: outdent`
-                Directory into which the backup is stored. Must already exist, defaults to the current directory
+                Directory in which to store the backup. Must already exist, defaults to the current directory
             `,
             default: '.',
-            string: true,
-            normalize: true,
-            coerce: (arg: string) => path.resolve(arg),
+            config: true,
+            configParser: (dir: string): Config =>
+                ({ dir, ...require(path.resolve(dir, relpathConfig)) }),
         },
-
         'space': {
             desc: outdent`
                 Contentful space ID
             `,
             string: true,
+            implies: 'token',
         },
         'token': {
             desc: outdent`
                 Contentful Content Delivery API token
             `,
             string: true,
+            implies: 'space',
         },
     })
-    .check((argvv: { dir: string, space?: string, token?: string }) => {
-        try {
-            // eslint-disable-next-line no-bitwise
-            fs.accessSync(argvv.dir, fs.constants.F_OK | fs.constants.R_OK | fs.constants.W_OK);
-
-        } catch (err) {
-            throw new Error(`Unable to access ${argvv.dir}`);
+    .check((argvv: { dir: string, space?: string, token?: string, spaces?: Array<Space> }) => {
+        if (!argvv.space && !argvv.token && !Array.isArray(argvv.spaces)) {
+            throw new Error('No spaces/tokens defined either on command line or in config file');
         }
-
-        const stats = fs.statSync(argvv.dir);
-
-        if (!stats.isDirectory()) {
-            throw new Error(`Not a directory: ${argvv.dir}`);
-        }
-
-        let config = { space: argvv.space, token: argvv.token };
-
-        if (!argvv.space || !argvv.token) {
-            const pathConfig = path.resolve(argvv.dir, relpathConfig);
-
-            try {
-                config = {
-                    ...config,
-                    ...require(pathConfig),
-                };
-
-            } catch (err) {
-                throw new Error(`Expected config file at ${pathConfig}.{js,json}`);
-            }
-        }
-
-        if (!config.space) {
-            throw new Error('No space ID defined');
-        }
-
-        if (!config.token) {
-            throw new Error('No CDA token defined');
-        }
-
-        // I am a bad person.
-        argvv.space = config.space;
-        argvv.token = config.token;
 
         return true;
     });
 
 // we have all the args.
+
+const spec: BackupSpec = {
+    dir: argv.dir,
+    spaces: (argv.space && argv.token)
+        ? [{ id: argv.space, token: argv.token }]
+        : argv.spaces,
+};
 
 const spinner = ora();
 const bar = bardot.widthFill(5);
@@ -131,5 +106,5 @@ cfb.on('error', (err) => {
     console.log(err);
 });
 
-cfb.backup({ dir: argv.dir, space: argv.space, token: argv.token });
+cfb.backup(spec);
 
