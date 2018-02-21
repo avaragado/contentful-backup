@@ -4,7 +4,7 @@ import path from 'path';
 
 import { promisify } from 'util';
 
-import type { SyncCollection } from 'contentful';
+import type { SyncCollection, Entry, Asset, DeletedEntry, DeletedAsset } from 'contentful';
 import mkdirp from 'mkdirp';
 
 import { process as processEntry } from './processEntry';
@@ -15,6 +15,7 @@ import { process as processDeletedAsset } from './processDeletedAsset';
 type Progress = {
     done: number,
     total: number,
+    rec?: Entry | Asset | DeletedEntry | DeletedAsset,
 };
 
 type Emitter = (prog: Progress) => any;
@@ -23,19 +24,18 @@ const mkdir = promisify(mkdirp);
 
 // we process each entry/asset/deletion serially, so we don't clobber the contentful API
 // with a bunch of parallel requests for asset originals.
-const applySerially = async (progress, dir, emit, specs) => {
+const applySerially = async (done, total, dir, emit, specs) => {
     if (specs.length === 0) {
         return null;
     }
 
-    const [spec, ...specsRest] = specs;
+    const [{ fn, rec }, ...specsRest] = specs;
 
-    await spec.fn(dir, spec.rec);
+    await fn(dir, rec);
 
-    progress.done += 1;
-    emit(progress);
+    emit({ done: done + 1, total, rec });
 
-    return applySerially(progress, dir, emit, specsRest);
+    return applySerially(done + 1, total, dir, emit, specsRest);
 };
 
 const process = async (dir: string, response: SyncCollection, emit: Emitter) => {
@@ -43,9 +43,7 @@ const process = async (dir: string, response: SyncCollection, emit: Emitter) => 
     const total = [entries, assets, deletedEntries, deletedAssets]
         .reduce((acc, item) => acc + item.length, 0);
 
-    const progress: Progress = { done: 0, total };
-
-    emit(progress);
+    emit({ done: 0, total });
 
     if (total === 0) {
         return;
@@ -60,7 +58,7 @@ const process = async (dir: string, response: SyncCollection, emit: Emitter) => 
         .concat(deletedEntries.map(rec => ({ rec, fn: processDeletedEntry })))
         .concat(deletedAssets.map(rec => ({ rec, fn: processDeletedAsset })));
 
-    await applySerially(progress, dir, emit, specs);
+    await applySerially(0, total, dir, emit, specs);
 };
 
 export {

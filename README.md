@@ -132,14 +132,14 @@ During a backup, a `ContentfulBackup` instance emits events indicating what's go
 | `afterSpace` | `Space` | Fetched this space metadata, which has been saved in `space.json` |
 | `beforeContentTypes` | `void` | About to fetch content type metadata |
 | `afterContentTypes` | `ContentTypeCollection` | Fetched this content type metadata, which has been saved in `contentTypes.json` |
-| `syncMeta` | `{ type: incremental | initial, lastSyncDate: ?Date }` | Ready to synchronise: `type` indicates the type of sync, and when `type` is `incremental` the `lastSyncDate` is the timestamp of the last successful backup |
+| `syncMeta` | `{ type: "incremental" | "initial", lastSyncDate: ?Date }` | Ready to synchronise: `type` indicates the type of sync, and when `type` is `incremental` the `lastSyncDate` is the timestamp of the last successful backup |
 | `beforeSync` | `void` | About to synchronise entries and assets |
-| `syncProgress` | `{ done: number, total: number }` | Synchronised `done/total`th of the changes. If `total` is zero there were no changes to synchronise |
+| `syncProgress` | `{ done: number, total: number, rec?: Entry | Asset | DeletedEntry | DeletedAsset  }` | Synchronised `done/total`th of the changes, and just synchronised record `rec`. If `total` is zero there were no changes to synchronise (and `rec` is absent) |
 | `afterSync` | `SyncCollection` | Finished synchronisation with this result, and the filesystem is up to date with all changes |
 | `done` | `void` | Backup has completed successfully |
 | `error` | `Error` | Backup failed at some point with this error |
 
-(In the table, `Space`, `ContentTypeCollection` and `SyncCollection` refer to the Contentful data types in their documentation.)
+(In the table, `Space`, `ContentTypeCollection`, `SyncCollection`, `Entry`, `Asset`, `DeletedEntry` and `DeletedAsset` refer to the Contentful data types in their documentation.)
 
 The `syncProgress` event counts a change as any of these:
 
