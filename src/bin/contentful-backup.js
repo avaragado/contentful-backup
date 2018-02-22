@@ -6,34 +6,42 @@ import path from 'path';
 import 'babel-polyfill';
 import yargs from 'yargs';
 import outdent from 'outdent';
-import ora from 'ora';
-import { bardot } from 'bardot';
 
-import type { Space, Config, BackupSpec } from '../';
+import type { Space, CLIConfig, FileConfig, BackupSpec, LogFn } from '../';
+
 import { ContentfulBackup } from '../';
+
+import { log } from '../lib/log';
+import * as schema from '../lib/schema';
 
 const relpathConfig = 'contentful-backup.config';
 
 const { argv } = yargs
     .usage(outdent`
-        $0 [--dir <target>] [--space <id> --token <cda-token>]
+        $0 [--dir <target>]
+           [--space <id> <token>]...
+           [--every <minutes>]
+           [--log console | file | <module>]
 
         Backs up one or more Contentful spaces into the target directory.
 
         If you omit --dir, assumes the target directory is the current directory.
 
-        If you specify --space and --token, backs up just this space.
+        Use --space to specify the space id and CDA token pair of each space you want to back up.
 
-        If you omit --space and --token, reads them from the 'spaces' key in
-        ${relpathConfig}.{js,json} in the target directory.
+        Use --every to automatically back up the spaces periodically (the app doesn't exit).
+
+        Use --log console to log backup events to the console, --log file to write logs to contentful-backup.log in the target directory (rotating log files at 1 MB), or --log <module> to use a custom node module (relative to cwd). If you omit --log, there's no log output.
+
+        Omitted arguments are read from ${relpathConfig}.{js,json} in the target directory.
     `)
     .example(
-        '$0 --space abcdabcdabcd --token abcdefg',
-        'Backs up space abcdabcdabcd to the current directory, using the CDA token supplied.',
+        '$0 --space ididididid1 tktktktktk1 --space ididididid2 tktktktktk2 --every 2',
+        'Backs up spaces ididididid1 and ididididid2 to the current directory every two minutes.',
     )
     .example(
-        '$0 --dir ../my-backups',
-        'Backs up spaces according to the configuration file in ../my-backups',
+        '$0 --dir ../my-backups --log file',
+        'Backs up spaces according to the configuration file in ../my-backups, and log to contentful-backup.log in that directory',
     )
     .options({
         'dir': {
@@ -42,69 +50,82 @@ const { argv } = yargs
             `,
             default: '.',
             config: true,
-            configParser: (dir: string): Config =>
-                ({ dir, ...require(path.resolve(dir, relpathConfig)) }),
+            configParser: (dir: string) => {
+                let cfg: FileConfig;
+
+                try {
+                    cfg = require(path.resolve(dir, relpathConfig));
+
+                } catch (err) {
+                    return { dir };
+                }
+
+                schema.configFile.validateSync(cfg);
+
+                // merge file content into the options: they'll be evaluated
+                // as if part of the command line. (no idea if this is wise
+                // or not.)
+                return { dir, ...cfg };
+            },
         },
         'space': {
             desc: outdent`
-                Contentful space ID
+                Contentful space id and Content Delivery API token
             `,
-            string: true,
-            implies: 'token',
+            array: true,
+            nargs: 2,
+            coerce: (parts: Array<string>): Array<Space> => {
+                if (parts.length % 2 !== 0) {
+                    throw new Error('You must supply a token for every space id');
+                }
+
+                return parts.reduce(
+                    (spaces, part, ix) => (ix % 2 === 0
+                        ? spaces.concat({ id: part, token: parts[ix + 1] })
+                        : spaces),
+                    [],
+                );
+            },
         },
-        'token': {
+        'every': {
             desc: outdent`
-                Contentful Content Delivery API token
+                How frequently to back up, in minutes (app never exits)
+            `,
+            number: true,
+        },
+        'log': {
+            desc: outdent`
+                Log to console (--log console), to contentful-backup.log in target directory (--log file), or using a custom node module (--log path/to/module/from/current/dir)
             `,
             string: true,
-            implies: 'space',
+            default: 'none',
+            coerce: (logname: string): LogFn => {
+                if (log[logname]) {
+                    return log[logname];
+                }
+
+                return require(logname);
+            },
         },
     })
-    .check((argvv: { dir: string, space?: string, token?: string, spaces?: Array<Space> }) => {
-        if (!argvv.space && !argvv.token && !Array.isArray(argvv.spaces)) {
-            throw new Error('No spaces/tokens defined either on command line or in config file');
-        }
+    .check((argvv) => {
+        schema.configCLI.validateSync(argvv);
 
         return true;
     });
 
 // we have all the args.
+(argv: CLIConfig); // eslint-disable-line no-unused-expressions
 
 const spec: BackupSpec = {
     dir: argv.dir,
-    spaces: (argv.space && argv.token)
-        ? [{ id: argv.space, token: argv.token }]
-        : argv.spaces,
+    spaces: argv.space || argv.spaces,
+    every: argv.every || null,
 };
 
-const spinner = ora();
-const bar = bardot.widthFill(5);
+console.log('argv', JSON.stringify(argv, null, 4));
+console.log('spec', JSON.stringify(spec, null, 4));
 
-const cfb = new ContentfulBackup();
-
-cfb.on('start', ({ space, dir }) => spinner.start(`Starting backup of ${space} to ${dir}...`));
-
-cfb.on('syncMeta', ({ type, lastSyncDate }) => spinner.succeed().start({
-    initial: 'No current backup found: will download entire space',
-    incremental: `Backing up changes since ${lastSyncDate}`,
-}[type]));
-
-cfb.on('beforeSpace', () => spinner.succeed().start('Getting space metadata...'));
-cfb.on('beforeContentTypes', () => spinner.succeed().start('Getting content type metadata...'));
-cfb.on('beforeSync', () => spinner.succeed().start('Syncing...'));
-
-cfb.on('syncProgress', prog => (prog.total === 0
-    ? spinner.start('Nothing has changed')
-    : spinner.start(bar.current(prog.done).maximum(prog.total).toString())
-));
-
-cfb.on('done', () => spinner.succeed().succeed('OK'));
-
-cfb.on('error', (err) => {
-    spinner.fail('An error occurred');
-
-    console.log(err);
-});
+const cfb = argv.log(new ContentfulBackup(), spec);
 
 cfb.backup(spec);
-

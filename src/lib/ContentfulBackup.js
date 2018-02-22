@@ -9,12 +9,14 @@ import type { ContentfulClientApi } from 'contentful';
 import { createClient } from 'contentful';
 import mkdirp from 'mkdirp';
 
-import type { BackupSpec } from '../';
+import type { BackupSpec, Space } from '../';
 import * as synctoken from './synctoken';
 import { process } from './process';
 
 const writeFile = promisify(fs.writeFile);
 const mkdir = promisify(mkdirp);
+
+const sleep = minutes => new Promise(resolve => setTimeout(resolve, minutes * 60 * 1000));
 
 class ContentfulBackup extends EventEmitter {
     async sync (cfClient: ContentfulClientApi, dir: string) {
@@ -75,7 +77,7 @@ class ContentfulBackup extends EventEmitter {
         }
     }
 
-    async backup ({ dir, spaces }: BackupSpec) {
+    async backupAll ({ dir, spaces }: { dir: string, spaces: Array<Space> }) {
         if (spaces.length === 0) {
             return true;
         }
@@ -84,7 +86,18 @@ class ContentfulBackup extends EventEmitter {
 
         await this.backupSpace({ dir, space, token });
 
-        return this.backup({ dir, spaces: spacesRest });
+        return this.backupAll({ dir, spaces: spacesRest });
+    }
+
+    async backup ({ dir, spaces, every }: BackupSpec) {
+        if (every) {
+            while (true) { // eslint-disable-line no-constant-condition
+                await this.backupAll({ dir, spaces }); // eslint-disable-line no-await-in-loop
+                await sleep(every); // eslint-disable-line no-await-in-loop
+            }
+        }
+
+        return this.backupAll({ dir, spaces });
     }
 }
 
