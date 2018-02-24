@@ -22,44 +22,44 @@ class ContentfulBackup extends EventEmitter {
     async sync (cfClient: ContentfulClientApi, dir: string) {
         const { nextSyncToken, lastSyncDate } = synctoken.load(dir);
 
-        this.emit('syncMeta', {
+        this.emit('beforeContent', {
             type: nextSyncToken ? 'incremental' : 'initial',
             lastSyncDate,
         });
 
         const opts = nextSyncToken ? { nextSyncToken } : { initial: true, resolveLinks: false };
 
-        this.emit('beforeSync');
-
         const response = await cfClient.sync(opts);
 
-        await process(dir, response, prog => this.emit('syncProgress', prog));
+        await process(dir, response, prog => this.emit('progressContent', prog));
 
-        this.emit('afterSync', response);
+        this.emit('afterContent', response);
 
         synctoken.save(dir, response.nextSyncToken);
     }
 
     async space (cfClient: ContentfulClientApi, dir: string) {
-        this.emit('beforeSpace');
+        this.emit('beforeSpaceMetadata');
+
         const response = await cfClient.getSpace();
 
         await writeFile(path.resolve(dir, 'space.json'), JSON.stringify(response, null, 4));
 
-        this.emit('afterSpace', response);
+        this.emit('afterSpaceMetadata', response);
     }
 
     async contentTypes (cfClient: ContentfulClientApi, dir: string) {
-        this.emit('beforeContentTypes');
+        this.emit('beforeContentTypeMetadata');
+
         const response = await cfClient.getContentTypes();
 
         await writeFile(path.resolve(dir, 'contentTypes.json'), JSON.stringify(response, null, 4));
 
-        this.emit('afterContentTypes', response);
+        this.emit('afterContentTypeMetadata', response);
     }
 
     async backupSpace ({ dir, space, token }: { dir: string, space: string, token: string }) {
-        this.emit('start', { dir, space, token });
+        this.emit('beforeSpace', { dir, space, token });
 
         const cfClient = createClient({ space, accessToken: token });
         const dirSpace = path.resolve(dir, space);
@@ -70,14 +70,14 @@ class ContentfulBackup extends EventEmitter {
             await this.contentTypes(cfClient, dirSpace);
             await this.sync(cfClient, dirSpace);
 
-            this.emit('done');
+            this.emit('afterSpace', null);
 
         } catch (err) {
-            this.emit('error', err);
+            this.emit('afterSpace', err);
         }
     }
 
-    async backupAll ({ dir, spaces }: { dir: string, spaces: Array<Space> }) {
+    async backupSpaces ({ dir, spaces }: { dir: string, spaces: Array<Space> }) {
         if (spaces.length === 0) {
             return true;
         }
@@ -86,7 +86,17 @@ class ContentfulBackup extends EventEmitter {
 
         await this.backupSpace({ dir, space, token });
 
-        return this.backupAll({ dir, spaces: spacesRest });
+        return this.backupSpaces({ dir, spaces: spacesRest });
+    }
+
+    async backupAll ({ dir, spaces }: { dir: string, spaces: Array<Space> }) {
+        if (spaces.length === 0) {
+            return;
+        }
+
+        this.emit('beforeRun');
+        await this.backupSpaces({ dir, spaces });
+        this.emit('afterRun');
     }
 
     async backup ({ dir, spaces, every }: BackupSpec) {
@@ -97,7 +107,7 @@ class ContentfulBackup extends EventEmitter {
             }
         }
 
-        return this.backupAll({ dir, spaces });
+        await this.backupAll({ dir, spaces });
     }
 }
 

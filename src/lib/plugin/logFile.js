@@ -9,11 +9,11 @@ import { ContentfulBackup } from '../../';
 
 const relpathLog = 'contentful-backup.log';
 
-const log = (cfb: ContentfulBackup, spec: BackupSpec) => {
+const log = (cfb: ContentfulBackup, backup: BackupSpec) => {
     winston.configure({
         transports: [
             new (winston.transports.File)({
-                filename: path.resolve(spec.dir, relpathLog),
+                filename: path.resolve(backup.dir, relpathLog),
                 maxsize: 1 * 1024 * 1024,
                 maxFiles: 10,
                 json: false,
@@ -23,17 +23,19 @@ const log = (cfb: ContentfulBackup, spec: BackupSpec) => {
         ],
     });
 
-    cfb.on('start', ({ space }) => winston.info(`Backing up ${space}`));
+    cfb.on('beforeRun', () => winston.info('Starting backup run'));
 
-    cfb.on('afterSpace', () => winston.info('Backed up space metadata'));
-    cfb.on('afterContentTypes', () => winston.info('Backed up content type metadata'));
+    cfb.on('beforeSpace', ({ space }) => winston.info(`Backing up ${space}`));
 
-    cfb.on('syncMeta', ({ type, lastSyncDate }) => winston.info({
+    cfb.on('afterSpaceMetadata', () => winston.info('Backed up space metadata'));
+    cfb.on('afterContentTypeMetadata', () => winston.info('Backed up content type metadata'));
+
+    cfb.on('beforeContent', ({ type, lastSyncDate }) => winston.info({
         initial: 'No current backup found: will download entire space',
         incremental: `Backing up changes since ${lastSyncDate}`,
     }[type]));
 
-    cfb.on('syncProgress', (prog) => {
+    cfb.on('progressContent', (prog) => {
         if (prog.total === 0) {
             return winston.info('Nothing has changed');
         }
@@ -48,11 +50,16 @@ const log = (cfb: ContentfulBackup, spec: BackupSpec) => {
         return null;
     });
 
-    cfb.on('done', () => winston.info('Done'));
+    cfb.on('afterSpace', (err: ?Error) => {
+        if (err) {
+            winston.error('An error occurred', err);
 
-    cfb.on('error', (err) => {
-        winston.error('An error occurred', err);
+        } else {
+            winston.info('Done');
+        }
     });
+
+    cfb.on('afterRun', () => winston.info('End of backup run'));
 
     return cfb;
 };

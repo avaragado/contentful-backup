@@ -7,11 +7,11 @@ import 'babel-polyfill';
 import yargs from 'yargs';
 import outdent from 'outdent';
 
-import type { Space, CLIConfig, FileConfig, BackupSpec, LogFn } from '../';
+import type { Space, CLIConfig, FileConfig, BackupSpec, PluginSpec, PluginFnSpec } from '../';
 
 import { ContentfulBackup } from '../';
 
-import { log } from '../lib/log';
+import { plugin } from '../lib/plugin';
 import * as schema from '../lib/schema';
 
 const relpathConfig = 'contentful-backup.config';
@@ -21,7 +21,7 @@ const { argv } = yargs
         $0 [--dir <target>]
            [--space <id> <token>]...
            [--every <minutes>]
-           [--log console | file | <module>]
+           [--plugins [log-console | log-file | git-commit | <module>]... ]
 
         Backs up one or more Contentful spaces into the target directory.
 
@@ -31,17 +31,25 @@ const { argv } = yargs
 
         Use --every to automatically back up the spaces periodically (the app doesn't exit).
 
-        Use --log console to log backup events to the console, --log file to write logs to contentful-backup.log in the target directory (rotating log files at 1 MB), or --log <module> to use a custom node module (relative to cwd). If you omit --log, there's no log output.
+        Use --plugins with a list of plugin names to add these plugins, in order. Use a path (absolute, or relative to the current directory) to add a node module as a plugin.
 
         Omitted arguments are read from ${relpathConfig}.{js,json} in the target directory.
+
+        Built-in plugins:
+
+        - log-console: log backup events to the console.
+        - log-file: log backup events to the file contentful-backup.log in the target directory, rotating log files at 1 MB.
+        - git-commit: after a successful or failed backup, check changes into git.
+
+        The git-commit  assumes the target directory is a valid git repository in which the user running the app has commit and push permissions on the current branch, and that git is in the PATH. The plugin makes no effort to recover from errors.
     `)
     .example(
         '$0 --space ididididid1 tktktktktk1 --space ididididid2 tktktktktk2 --every 2',
         'Backs up spaces ididididid1 and ididididid2 to the current directory every two minutes.',
     )
     .example(
-        '$0 --dir ../my-backups --log file',
-        'Backs up spaces according to the configuration file in ../my-backups, and log to contentful-backup.log in that directory',
+        '$0 --dir ../my-backups --plugins log-file git-commit git-commit',
+        'Backs up spaces according to the configuration file in ../my-backups, and logs to contentful-backup.log in that directory, then checks in all changes.',
     )
     .options({
         'dir': {
@@ -93,19 +101,27 @@ const { argv } = yargs
             `,
             number: true,
         },
-        'log': {
+        'plugins': {
+            alias: 'plugin',
             desc: outdent`
-                Log to console (--log console), to contentful-backup.log in target directory (--log file), or using a custom node module (--log path/to/module/from/current/dir)
+                Ordered list of plugins to use with backups. Built-ins: log-console, log-file, git-commit. Use a custom node module by specifying the path (relative to current dir)
             `,
-            string: true,
-            default: 'none',
-            coerce: (logname: string): LogFn => {
-                if (log[logname]) {
-                    return log[logname];
-                }
+            array: true,
+            default: [],
+            coerce: (pluginSpecs: Array<PluginSpec>): Array<PluginFnSpec> =>
+                pluginSpecs.map((pluginSpec) => {
+                    if (typeof pluginSpec === 'string') {
+                        return [
+                            plugin[pluginSpec] || require(pluginSpec),
+                            {},
+                        ];
+                    }
 
-                return require(logname);
-            },
+                    return [
+                        plugin[pluginSpec[0]] || require(pluginSpec[0]),
+                        pluginSpec[1],
+                    ];
+                }),
         },
     })
     .check((argvv) => {
@@ -117,15 +133,15 @@ const { argv } = yargs
 // we have all the args.
 (argv: CLIConfig); // eslint-disable-line no-unused-expressions
 
-const spec: BackupSpec = {
+const backup: BackupSpec = {
     dir: argv.dir,
     spaces: argv.space || argv.spaces,
     every: argv.every || null,
 };
 
-console.log('argv', JSON.stringify(argv, null, 4));
-console.log('spec', JSON.stringify(spec, null, 4));
+const cfb = argv.plugins.reduce(
+    (cfbAcc, plg) => plg[0](cfbAcc, backup, plg[1]),
+    new ContentfulBackup(),
+);
 
-const cfb = argv.log(new ContentfulBackup(), spec);
-
-cfb.backup(spec);
+cfb.backup(backup);
