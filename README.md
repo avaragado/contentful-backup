@@ -16,7 +16,7 @@
 - **Once or forever** Back up once then exit – or run forever, backing up as frequently as you want.
 - **Plugins** Built-in plugins for logging to console and file, and to perform post-backup git actions, with the ability to define your own.
 
-**Files are deleted locally too.** When entries or assets are deleted from Contentful, `contentful-backup` removes the associated files from the local backup. To recover entries or assets accidentally deleted on Contentful, we recommend you use `contentful-backup` in conjunction with your favourite version control system. For example: run `contentful-backup`, then commit any changes made to git. (Some _mirror-my-disk-to-a-cloud_ services might work too, if they let you time travel and if they haven't silently crashed.)
+**Files are deleted locally too.** When entries or assets are deleted from Contentful, `contentful-backup` removes the associated files from the local backup. To recover entries or assets accidentally deleted on Contentful, we recommend you use `contentful-backup` in conjunction with your favourite version control system. For example, run `contentful-backup` with the `git-commit` plugin to save changes to a git repository and push it to a remote. (Some _mirror-my-disk-to-a-cloud_ services might work too, if they let you time travel and if they haven't silently crashed.)
 
 
 ### Caveats
@@ -95,11 +95,17 @@ Example configuration file `contentful-backup.config.json`:
 |---|---|---|
 | `log-console` | – | Log backup events to the console. |
 | `log-file` | – | Log backup events to the file `contentful-backup.log` in the target directory, rotating log files at 1 MB. |
-| `git-commit` | `{ push: boolean | string }` | After a backup run, check changes into git, then optionally push the branch to a remote. The configuration option `push` can be `true` (push to the default remote), `false` (don't push), or the name of a remote (push to that remote). |
+| `git-commit` | `{ push: boolean \| string }` | After a backup run, check changes into git, then optionally push the branch to a remote. The configuration option `push` can be `true` (push to the default remote), `false` (don't push), or the name of a remote (push to that remote). |
 
 Plugin options are defined in the configuration file, as an object: see the example in the section above.
 
-The `git-commit` plugin assumes the target directory is a valid git repository in which the user running the app has commit and push permissions on the current branch, and that git is in the PATH. The plugin makes no effort to recover from errors.
+The `git-commit` plugin assumes:
+
+- The target directory is a valid git repository
+- The user running the app has commit and push permissions on the current branch in that repository
+- `git` is in the `PATH`.
+
+The plugin makes no effort to recover from errors.
 
 
 ### Examples
@@ -181,8 +187,8 @@ During a backup run, a `ContentfulBackup` instance emits events indicating what'
 | `afterSpaceMetadata` | `Space` | space | Fetched this space metadata, which has been saved in `space.json` |
 | `beforeContentTypeMetadata` | `void` | space | About to fetch content type metadata |
 | `afterContentTypeMetadata` | `ContentTypeCollection` | space | Fetched this content type metadata, which has been saved in `contentTypes.json` |
-| `beforeContent` | `{ type: "incremental" | "initial", lastSyncDate: ?Date }` | space | About to synchronise entries and assets. `type` indicates the type of sync, and when `type` is `incremental` the `lastSyncDate` is the timestamp of the last successful backup of this space |
-| `progressContent` | `{ done: number, total: number, rec?: Entry | Asset | DeletedEntry | DeletedAsset  }` | space | Synchronised `done/total`th of the changes, and just synchronised record `rec`. If `total` is zero there were no changes to synchronise (and `rec` is absent) |
+| `beforeContent` | `{ type: "incremental" \| "initial", lastSyncDate: ?Date }` | space | About to synchronise entries and assets. `type` indicates the type of sync, and when `type` is `incremental` the `lastSyncDate` is the timestamp of the last successful backup of this space |
+| `progressContent` | `{ done: number, total: number, rec?: Entry \| Asset \| DeletedEntry \| DeletedAsset  }` | space | Synchronised `done/total`th of the changes, and just synchronised record `rec`. If `total` is zero there were no changes to synchronise (and `rec` is absent) |
 | `afterContent` | `SyncCollection` | space | Finished synchronisation with this result, and the filesystem is up to date with all changes |
 | `afterSpace` | `?Error` | space | Finished backup of a space, and possibly failed with an error |
 | `afterRun` | `void` | run | Finished a backup run |
