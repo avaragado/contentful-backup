@@ -6,7 +6,9 @@ import { ContentfulBackup } from './lib/ContentfulBackup';
 export type Space = { id: string, token: string };
 export type PluginName = "log-console" | "log-file" | "git-commit" | string;
 export type PluginConfig = Object;
-export type PluginSpec = PluginName | [PluginName, PluginConfig];
+export type PluginSpecLoose = PluginName;
+export type PluginSpecStrict = [PluginName, PluginConfig];
+export type PluginSpec = PluginSpecLoose | PluginSpecStrict;
 
 export type BackupSpec = {
     dir: string,
@@ -20,8 +22,6 @@ export type PluginFn = (
     config: PluginConfig,
 ) => ContentfulBackup;
 
-export type PluginFnSpec = [PluginFn, PluginConfig];
-
 export type FileConfig = {
     spaces?: Array<Space>,
     every?: number,
@@ -33,7 +33,7 @@ export type CLIConfig = {
     space?: Array<Space>,
     spaces?: Array<Space>,
     every?: number,
-    plugins: Array<PluginFnSpec>,
+    plugins: Array<PluginSpecStrict>,
 };
 
 export {

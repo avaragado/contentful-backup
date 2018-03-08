@@ -49,7 +49,7 @@ Backs up the space or spaces specified into the target directory (which must alr
 
 Specify `--every` to automatically back up the spaces periodically. In this mode, the app does a backup run, sleeps for the defined period, then repeats: the app never exits.
 
-Specify `--plugins` with a list of plugin names to add these plugins, in order. Use a path (absolute, or relative to the current directory) to add a node module as a plugin. See below for the built-in plugins.
+Specify `--plugins` with a list of plugin names to add these plugins, in order. Use a path (absolute, or relative to the target or current directory) or module name to add a node module as a plugin. See below for the built-in plugins.
 
 Command-line arguments override options specified in any `contentful-backup` configuration file found in the target directory. In that configuration file you can also define plugin-specific options.
 
@@ -64,7 +64,9 @@ The configuration file must export or define an object complying with the type `
 type Space = { id: string, token: string };
 type PluginName = "log-console" | "log-file" | "git-commit" | string;
 type PluginConfig = Object;
-type PluginSpec = PluginName | [PluginName, PluginConfig];
+type PluginSpecLoose = PluginName;
+type PluginSpecStrict = [PluginName, PluginConfig];
+type PluginSpec = PluginSpecLoose | PluginSpecStrict;
 
 type FileConfig = {
     spaces?: Array<Space>,

@@ -7,16 +7,19 @@ const space = yup.object().shape({
     token: yup.string().required(),
 });
 
+const pluginLoose = yup.string();
+
+const pluginStrict = yup.array().min(2).max(2)
+    .test(
+        'tuple',
+        'Plugin tuples must be [string, object]',
+        ([name, cfg]) => yup.string().isValidSync(name) && yup.object().isValidSync(cfg),
+    );
+
 const plugin = yup.mixed().test(
     'plugin',
     'Plugin definitions must be a string or [string, object]',
-    val => yup.string().isValidSync(val) || yup.array().min(2).max(2)
-        .test(
-            'tuple',
-            'Plugin tuples must be [string, object]',
-            tuple => yup.string().isValidSync(tuple[0]) && yup.object().isValidSync(tuple[1]),
-        )
-        .isValidSync(val),
+    val => pluginLoose.isValidSync(val) || pluginStrict.isValidSync(val),
 );
 
 const configFile = yup.object().shape({
@@ -30,12 +33,7 @@ const configCLI = yup.object().shape({
     space: yup.array().of(space),
     spaces: yup.array().of(space),
     every: yup.number(),
-    plugins: yup.array().of(yup.array().min(2).max(2).required()
-        .test(
-            'plugins',
-            'No valid plugin function is defined',
-            plg => typeof plg[0] === 'function' && yup.object().isValidSync(plg[1]),
-        )),
+    plugins: yup.array().of(pluginStrict),
 }).test(
     'spaces',
     'No spaces defined either on command line or in config file (is config file valid?)',

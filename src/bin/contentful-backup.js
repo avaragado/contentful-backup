@@ -7,7 +7,7 @@ import 'babel-polyfill';
 import yargs from 'yargs';
 import outdent from 'outdent';
 
-import type { Space, CLIConfig, FileConfig, BackupSpec, PluginSpec, PluginFnSpec } from '../';
+import type { Space, CLIConfig, FileConfig, BackupSpec, PluginName, PluginFn, PluginSpec, PluginSpecStrict } from '../';
 
 import { ContentfulBackup } from '../';
 
@@ -15,6 +15,22 @@ import { plugin } from '../lib/plugin';
 import * as schema from '../lib/schema';
 
 const relpathConfig = 'contentful-backup.config';
+
+const requireOrNull = (name: string): ?PluginFn => {
+    try {
+        return require(name);
+
+    } catch (err) {
+        return null;
+    }
+};
+
+const requirePlugin = (name: PluginName, dir: string): ?PluginFn =>
+    plugin[name] ||
+    requireOrNull(path.join(dir, name)) ||
+    requireOrNull(path.join(process.cwd(), name)) ||
+    requireOrNull(name);
+
 
 const { argv } = yargs
     .usage(outdent`
@@ -31,7 +47,7 @@ const { argv } = yargs
 
         Use --every to automatically back up the spaces periodically (the app doesn't exit).
 
-        Use --plugins with a list of plugin names to add these plugins, in order. Use a path (absolute, or relative to the current directory) to add a node module as a plugin.
+        Use --plugins with a list of plugin names to add these plugins, in order. Use a path (absolute, or relative to target or current directory) or module name to add a node module as a plugin.
 
         Omitted arguments are read from ${relpathConfig}.{js,json} in the target directory.
 
@@ -41,7 +57,7 @@ const { argv } = yargs
         - log-file: log backup events to the file contentful-backup.log in the target directory, rotating log files at 1 MB.
         - git-commit: after a successful or failed backup, check changes into git.
 
-        The git-commit  assumes the target directory is a valid git repository in which the user running the app has commit and push permissions on the current branch, and that git is in the PATH. The plugin makes no effort to recover from errors.
+        The git-commit plugin assumes the target directory is a valid git repository in which the user running the app has commit and push permissions on the current branch, and that git is in the PATH. The plugin makes no effort to recover from errors.
     `)
     .example(
         '$0 --space ididididid1 tktktktktk1 --space ididididid2 tktktktktk2 --every 2',
@@ -108,24 +124,24 @@ const { argv } = yargs
             `,
             array: true,
             default: [],
-            coerce: (pluginSpecs: Array<PluginSpec>): Array<PluginFnSpec> =>
-                pluginSpecs.map((pluginSpec) => {
-                    if (typeof pluginSpec === 'string') {
-                        return [
-                            plugin[pluginSpec] || require(pluginSpec),
-                            {},
-                        ];
-                    }
-
-                    return [
-                        plugin[pluginSpec[0]] || require(pluginSpec[0]),
-                        pluginSpec[1],
-                    ];
-                }),
+            coerce: (pluginSpecs: Array<PluginSpec>): Array<PluginSpecStrict> =>
+                pluginSpecs.map(pluginSpec => (
+                    typeof pluginSpec === 'string'
+                        ? [pluginSpec, {}]
+                        : pluginSpec
+                )),
         },
     })
     .check((argvv) => {
         schema.configCLI.validateSync(argvv);
+
+        const missing = argvv.plugins
+            .map(([name]) => (requirePlugin(name, argvv.dir) ? false : name))
+            .filter(Boolean);
+
+        if (missing.length) {
+            throw new Error(`Unable to find plugin(s): ${missing.join(', ')}`);
+        }
 
         return true;
     });
@@ -139,9 +155,11 @@ const backup: BackupSpec = {
     every: argv.every || null,
 };
 
-const cfb = argv.plugins.reduce(
-    (cfbAcc, plg) => plg[0](cfbAcc, backup, plg[1]),
-    new ContentfulBackup(),
-);
+const cfb = argv.plugins
+    .map(([name, cfg]) => ({ fn: requirePlugin(name, backup.dir), cfg }))
+    .reduce(
+        (cfbAcc, { fn, cfg }) => fn(cfbAcc, backup, cfg),
+        new ContentfulBackup(),
+    );
 
 cfb.backup(backup);
