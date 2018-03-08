@@ -14,9 +14,9 @@
 - **Incremental backup of entries and assets** Run the app at any time to keep a backup "topped up". (Space and content type metadata is downloaded in full each time.)
 - **Multiple spaces** Back up one or more spaces with a single run of the app.
 - **Once or forever** Back up once then exit – or run forever, backing up as frequently as you want.
-- **Plugins** Built-in plugins for logging to console and file, and to perform post-backup git actions, with the ability to define your own.
+- **Plugins** Built-in plugins for logging to console and file, and to perform post-backup git actions, with the ability to define your own plugins.
 
-**Files are deleted locally too.** When entries or assets are deleted from Contentful, `contentful-backup` removes the associated files from the local backup. To recover entries or assets accidentally deleted on Contentful, we recommend you use `contentful-backup` in conjunction with your favourite version control system. For example, run `contentful-backup` with the `git-commit` plugin to save changes to a git repository and push it to a remote. (Some _mirror-my-disk-to-a-cloud_ services might work too, if they let you time travel and if they haven't silently crashed.)
+**Files are deleted locally too.** When entries or assets are deleted from Contentful, `contentful-backup` removes the associated files from the local backup. To recover entries or assets accidentally deleted on Contentful, we recommend you use `contentful-backup` in conjunction with your favourite version control system. For example, run `contentful-backup` with the built-in `git-commit` plugin to save changes to a git repository and push it to a remote. (Some _mirror-my-disk-to-a-cloud_ services might work too, if they let you time travel and if they haven't silently crashed.)
 
 
 ### Caveats
@@ -89,13 +89,30 @@ Example configuration file `contentful-backup.config.json`:
 }
 ```
 
-### Built-in plugins
+### Examples
+
+```bash
+$ contentful-backup --space ididididid1 tktktktktk1 --space ididididid2 tktktktktk2 --every 2
+```
+
+Backs up spaces `ididididid1` and `ididididid2` to the current directory every two minutes. Other configuration (here, plugins) would be read from a configuration file in the current directory.
+
+```bash
+$ contentful-backup --dir ../my-backups --plugins log-file git-commit
+```
+
+Backs up spaces to `../my-backups`, logs to `contentful-backup.log` in that directory, then checks in all changes. Other configuration (here, the spaces and any `every` setting) would be read from a configuration file in `../my-backups`.
+
+
+## Plugins
+
+These are the built-in plugins (see later for how to write your own plugin):
 
 | Name | Options | Description |
 |---|---|---|
 | `log-console` | – | Log backup events to the console. |
-| `log-file` | – | Log backup events to the file `contentful-backup.log` in the target directory, rotating log files at 1 MB. |
-| `git-commit` | `{ push: boolean \| string }` | After a backup run, check changes into git, then optionally push the branch to a remote. The configuration option `push` can be `true` (push to the default remote), `false` (don't push), or the name of a remote (push to that remote). |
+| `log-file` | `{ level: 'error' \| 'warn' \| 'info' \| 'verbose' \| 'debug' \| 'silly' }` | Log backup events to the file `contentful-backup.log` in the target directory, rotating log files at 1 MB. The configuration option `level` indicates how verbose the messages should be (default: `info`). |
+| `git-commit` | `{ push: boolean \| string }` | After a backup run, check changes into git, then optionally push the branch to a remote. The configuration option `push` can be `true` (push to the default remote), `false` (don't push, the default), or the name of a remote (push to that remote). |
 
 Plugin options are defined in the configuration file, as an object: see the example in the section above.
 
@@ -106,21 +123,6 @@ The `git-commit` plugin assumes:
 - `git` is in the `PATH`.
 
 The plugin makes no effort to recover from errors.
-
-
-### Examples
-
-```bash
-$ contentful-backup --space ididididid1 tktktktktk1 --space ididididid2 tktktktktk2 --every 2
-```
-
-Backs up spaces `ididididid1` and `ididididid2` to the current directory every two minutes.
-
-```bash
-$ contentful-backup --dir ../my-backups --plugins log-file git-commit
-```
-
-Backs up spaces according to the configuration file in `../my-backups`, logs to `contentful-backup.log` in that directory, then checks in all changes.
 
 
 ## Files written
@@ -183,14 +185,14 @@ During a backup run, a `ContentfulBackup` instance emits events indicating what'
 |---|---|---|---|
 | `beforeRun` | `void` | run | About to start a backup run to back up all configured spaces |
 | `beforeSpace` | `{ dir: string, space: string, token: string }` | space | About to back up a space, with these parameters |
-| `beforeSpaceMetadata` | `void` | space | About to fetch space metadata |
-| `afterSpaceMetadata` | `Space` | space | Fetched this space metadata, which has been saved in `space.json` |
-| `beforeContentTypeMetadata` | `void` | space | About to fetch content type metadata |
-| `afterContentTypeMetadata` | `ContentTypeCollection` | space | Fetched this content type metadata, which has been saved in `contentTypes.json` |
-| `beforeContent` | `{ type: "incremental" \| "initial", lastSyncDate: ?Date }` | space | About to synchronise entries and assets. `type` indicates the type of sync, and when `type` is `incremental` the `lastSyncDate` is the timestamp of the last successful backup of this space |
-| `progressContent` | `{ done: number, total: number, rec?: Entry \| Asset \| DeletedEntry \| DeletedAsset  }` | space | Synchronised `done/total`th of the changes, and just synchronised record `rec`. If `total` is zero there were no changes to synchronise (and `rec` is absent) |
-| `afterContent` | `SyncCollection` | space | Finished synchronisation with this result, and the filesystem is up to date with all changes |
-| `afterSpace` | `?Error` | space | Finished backup of a space, and possibly failed with an error |
+| `beforeSpaceMetadata` | `{ space: string }` | space | About to fetch metadata for the space id in the parameter |
+| `afterSpaceMetadata` | `{ space: string, result: Space }` | space | Fetched space metadata, which has been saved in `space.json` |
+| `beforeContentTypeMetadata` | `{ space: string }` | space | About to fetch content type metadata for the space id in the parameter |
+| `afterContentTypeMetadata` | `{ space: string, result: ContentTypeCollection }` | space | Fetched content type metadata, which has been saved in `contentTypes.json` |
+| `beforeContent` | `{ space: string, type: "incremental" \| "initial", lastSyncDate: ?Date }` | space | About to synchronise entries and assets for the space id in the parameter. `type` indicates the type of sync, and when `type` is `incremental` the `lastSyncDate` is the timestamp of the last successful backup of this space. |
+| `progressContent` | `{ done: number, total: number, rec?: Entry \| Asset \| DeletedEntry \| DeletedAsset, space: string, type: "incremental" \| "initial", lastSyncDate: ?Date }` | space | Synchronised `done/total`th of the changes, and just synchronised record `rec`. If `total` is zero there were no changes to synchronise (and `rec` is absent). `space`, `type` and `lastSyncDate` are as for the `beforeContent` event. |
+| `afterContent` | `{ space: string, type: "incremental" \| "initial", lastSyncDate: ?Date, result: SyncCollection }` | space | Finished synchronisation with this result, and the filesystem is up to date with all changes. `space`, `type` and `lastSyncDate` are as for the `beforeContent` event (and the date value is the same as in that event). |
+| `afterSpace` | `{ space: string, error?: Error }` | space | Finished backup of a space, and possibly failed with an error |
 | `afterRun` | `void` | run | Finished a backup run |
 
 (In the table, `Space`, `ContentTypeCollection`, `SyncCollection`, `Entry`, `Asset`, `DeletedEntry` and `DeletedAsset` refer to the Contentful data types in their documentation.)
@@ -225,8 +227,8 @@ const shortlog = (cfb, { dir, spaces, every }, opts) => {
     cfb.on('beforeSpace', ({ space, dir }) =>
         console.log(`Starting backup of ${space} to ${dir}...`));
 
-    cfb.on('afterSpace', (err) =>
-        console.log(err ? err.toString() : 'OK'));
+    cfb.on('afterSpace', ({ error }) =>
+        console.log(error ? error.toString() : 'OK'));
 
     return cfb;
 };

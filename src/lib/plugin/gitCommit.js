@@ -19,9 +19,9 @@ const plugin = (cfb: ContentfulBackup, backup: BackupSpec, opts: GitPluginConfig
         errors = [];
     });
 
-    cfb.on('afterSpace', (err: ?Error) => {
-        if (err) {
-            errors.push(err);
+    cfb.on('afterSpace', ({ error }: { error?: Error }) => {
+        if (error) {
+            errors.push(error);
         }
     });
 

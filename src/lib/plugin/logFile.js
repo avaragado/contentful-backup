@@ -9,8 +9,15 @@ import { ContentfulBackup } from '../../';
 
 const relpathLog = 'contentful-backup.log';
 
-const log = (cfb: ContentfulBackup, backup: BackupSpec) => {
-    winston.configure({
+type LogLevel = 'error' | 'warn' | 'info' | 'verbose' | 'debug' | 'silly';
+
+type FilePluginConfig = {
+    level: LogLevel,
+};
+
+const log = (cfb: ContentfulBackup, backup: BackupSpec, opts: FilePluginConfig) => {
+    const logger = new (winston.Logger)({
+        level: opts.level || 'info',
         transports: [
             new (winston.transports.File)({
                 filename: path.resolve(backup.dir, relpathLog),
@@ -23,43 +30,44 @@ const log = (cfb: ContentfulBackup, backup: BackupSpec) => {
         ],
     });
 
-    cfb.on('beforeRun', () => winston.info('Starting backup run'));
+    cfb.on('beforeRun', () => logger.verbose('Starting backup run'));
+    cfb.on('beforeSpace', ({ space }) => logger.verbose(`${space} Backup starting`));
+    cfb.on('afterSpaceMetadata', ({ space }) => logger.verbose(`${space} Backed up metadata`));
+    cfb.on('afterContentTypeMetadata', ({ space }) => logger.verbose(`${space} Backed up content type metadata`));
 
-    cfb.on('beforeSpace', ({ space }) => winston.info(`Backing up ${space}`));
-
-    cfb.on('afterSpaceMetadata', () => winston.info('Backed up space metadata'));
-    cfb.on('afterContentTypeMetadata', () => winston.info('Backed up content type metadata'));
-
-    cfb.on('beforeContent', ({ type, lastSyncDate }) => winston.info({
-        initial: 'No current backup found: will download entire space',
-        incremental: `Backing up changes since ${lastSyncDate}`,
-    }[type]));
-
-    cfb.on('progressContent', (prog) => {
-        if (prog.total === 0) {
-            return winston.info('Nothing has changed');
+    cfb.on('progressContent', ({ total, done, rec, space, type, lastSyncDate }) => {
+        if (total === 0) {
+            return logger.verbose(`Nothing has changed since ${lastSyncDate}`);
         }
 
-        if (prog.rec) {
-            return winston.info(
-                `${prog.done}/${prog.total}`,
-                `${prog.rec.sys.type} id ${prog.rec.sys.id}`,
+        if (done === 0) {
+            logger.info({
+                initial: `${space} No current backup found: will download entire space`,
+                incremental: `${space} Backing up changes since ${lastSyncDate}`,
+            }[type]);
+        }
+
+        if (rec) {
+            return logger.info(
+                space,
+                `${done}/${total}`,
+                `${rec.sys.type} id ${rec.sys.id}`,
             );
         }
 
         return null;
     });
 
-    cfb.on('afterSpace', (err: ?Error) => {
-        if (err) {
-            winston.error('An error occurred', err);
+    cfb.on('afterSpace', ({ error }: { error?: Error }) => {
+        if (error) {
+            logger.error('An error occurred', error);
 
         } else {
-            winston.info('Done');
+            logger.verbose('Done');
         }
     });
 
-    cfb.on('afterRun', () => winston.info('End of backup run'));
+    cfb.on('afterRun', () => logger.verbose('End of backup run'));
 
     return cfb;
 };

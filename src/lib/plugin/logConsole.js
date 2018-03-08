@@ -8,50 +8,54 @@ import { ContentfulBackup } from '../../';
 const log = (cfb: ContentfulBackup) => {
     const spinner = ora().start();
     const bar = bardot.widthFill(20);
-    const data = {};
 
-    cfb.on('beforeRun', () => {
-        spinner.text = 'Starting backup run';
-    });
+    cfb.on('beforeRun', () => spinner.stopAndPersist({
+        symbol: '▶️ ',
+        text: `Starting backup run – ${new Date().toString()}`,
+    }));
 
     cfb.on('beforeSpace', ({ space, dir }) => {
-        spinner.succeed().start(`${space}: Starting backup to ${dir}...`);
-        data.space = space;
+        spinner.start(`${space}: Starting backup to ${dir}...`);
     });
 
-    cfb.on('beforeSpaceMetadata', () => {
-        spinner.text = `${data.space}: Getting space metadata...`;
+    cfb.on('beforeSpaceMetadata', ({ space }) => {
+        spinner.text = `${space}: Getting space metadata...`;
     });
 
-    cfb.on('beforeContentTypeMetadata', () => {
-        spinner.text = `${data.space}: Getting content type metadata...`;
+    cfb.on('beforeContentTypeMetadata', ({ space }) => {
+        spinner.text = `${space}: Getting content type metadata...`;
     });
 
-    cfb.on('beforeContent', ({ type, lastSyncDate }) => {
+    cfb.on('beforeContent', ({ space, type, lastSyncDate }) => {
         spinner.text = {
-            initial: `${data.space}: No current backup found: will download entire space`,
-            incremental: `${data.space}: Backing up changes since ${lastSyncDate}`,
+            initial: `${space}: No current backup found: will download entire space`,
+            incremental: `${space}: Backing up changes since ${lastSyncDate}`,
         }[type];
     });
 
-    cfb.on('progressContent', (prog) => {
-        spinner.text = (prog.total === 0
-            ? `${data.space}: No changes`
-            : `${data.space}: ${bar.current(prog.done).maximum(prog.total).toString()}`
+    cfb.on('progressContent', ({ done, total, space }) => {
+        spinner.text = (total === 0
+            ? `${space}: No changes`
+            : `${space}: ${bar.current(done).maximum(total).toString()}`
         );
     });
 
-    cfb.on('afterSpace', (err: ?Error) => {
-        if (err) {
-            spinner.fail(`${data.space}: An error occurred`);
-            console.log(err);
+    cfb.on('afterSpace', ({ space, error }: { space: string, error?: Error }) => {
+        if (error) {
+            spinner.fail(`${space}: An error occurred`);
+            console.log(error);
 
         } else {
-            spinner.text = `${data.space}: Complete`;
+            spinner.stopAndPersist({
+                symbol: '✅',
+            });
         }
     });
 
-    cfb.on('afterRun', () => spinner.succeed().succeed('End of backup run'));
+    cfb.on('afterRun', () => spinner.stopAndPersist({
+        symbol: '⏹ ',
+        text: `End of backup run – ${new Date().toString()}`,
+    }));
 
     return cfb;
 };
