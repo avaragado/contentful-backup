@@ -4,7 +4,7 @@
 import { ContentfulBackup } from './lib/ContentfulBackup';
 
 export type Space = { id: string, token: string };
-export type PluginName = "log-console" | "log-file" | "git-commit" | string;
+export type PluginName = "save-disk" | "log-console" | "log-file" | "git-commit" | string;
 export type PluginConfig = Object;
 export type PluginSpecLoose = PluginName;
 export type PluginSpecStrict = [PluginName, PluginConfig];
@@ -16,7 +16,7 @@ export type BackupSpec = {
     every: ?number,
 };
 
-export type PluginFn = (
+export type Plugin = (
     cfb: ContentfulBackup,
     backup: BackupSpec,
     config: PluginConfig,

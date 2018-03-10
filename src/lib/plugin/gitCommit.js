@@ -2,8 +2,7 @@
 
 import { execSync } from 'child_process';
 
-import type { BackupSpec } from '../../';
-import { ContentfulBackup } from '../../';
+import type { Plugin } from '../../';
 
 const execDir = cwd => cmd => execSync(cmd, { cwd }).toString('utf-8').trim();
 
@@ -11,7 +10,7 @@ type GitPluginConfig = {
     push?: boolean | string,
 };
 
-const plugin = (cfb: ContentfulBackup, backup: BackupSpec, opts: GitPluginConfig) => {
+const plugin: Plugin = (cfb, backup, opts: GitPluginConfig) => {
     const exec = execDir(backup.dir);
     let errors = [];
 

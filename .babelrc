@@ -3,7 +3,9 @@
         [
             "env",
             {
-                "node": 6
+                "targets": {
+                    "node": 8
+                }
             }
         ]
     ],

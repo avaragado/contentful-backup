@@ -2,17 +2,26 @@
 
 import path from 'path';
 import fs from 'fs';
+import { promisify } from 'util';
+
+import mkdirp from 'mkdirp';
+
+const mkdir = promisify(mkdirp);
+const readFile = promisify(fs.readFile);
+const writeFile = promisify(fs.writeFile);
+const stat = promisify(fs.stat);
 
 const relpathToken = 'nextSyncToken.txt';
+const abspathTokenForDir = dir => path.resolve(dir, relpathToken);
 
-type Loader = (dir: string) => { nextSyncToken: ?string, lastSyncDate: ?Date };
+type Loader = (dir: string) => Promise<{ nextSyncToken: ?string, lastSyncDate: ?Date }>;
 
-const load: Loader = (dir) => {
-    const abspath = path.resolve(dir, relpathToken);
+const load: Loader = async (dir) => {
+    const abspath = abspathTokenForDir(dir);
 
     try {
-        const nextSyncToken = fs.readFileSync(abspath, { encoding: 'utf-8' });
-        const stats = fs.statSync(abspath);
+        const nextSyncToken = await readFile(abspath, { encoding: 'utf-8' });
+        const stats = await stat(abspath);
 
         return {
             nextSyncToken,
@@ -24,8 +33,9 @@ const load: Loader = (dir) => {
     }
 };
 
-const save = (dir: string, nextSyncToken: string): void => {
-    fs.writeFileSync(path.resolve(dir, relpathToken), nextSyncToken);
+const save = async (dir: string, nextSyncToken: string): Promise<void> => {
+    await mkdir(dir);
+    await writeFile(abspathTokenForDir(dir), nextSyncToken);
 };
 
 export {

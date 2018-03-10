@@ -14,9 +14,9 @@
 - **Incremental backup of entries and assets** Run the app at any time to keep a backup "topped up". (Space and content type metadata is downloaded in full each time.)
 - **Multiple spaces** Back up one or more spaces with a single run of the app.
 - **Once or forever** Back up once then exit – or run forever, backing up as frequently as you want.
-- **Plugins** Built-in plugins for logging to console and file, and to perform post-backup git actions, with the ability to define your own plugins.
+- **Plugins** Built-in plugins for saving spaces to disk, logging to console and file, and performing post-backup git actions – with the ability to define your own plugins.
 
-**Files are deleted locally too.** When entries or assets are deleted from Contentful, `contentful-backup` removes the associated files from the local backup. To recover entries or assets accidentally deleted on Contentful, we recommend you use `contentful-backup` in conjunction with your favourite version control system. For example, run `contentful-backup` with the built-in `git-commit` plugin to save changes to a git repository and push it to a remote. (Some _mirror-my-disk-to-a-cloud_ services might work too, if they let you time travel and if they haven't silently crashed.)
+**Files are deleted locally too.** When entries or assets are deleted from Contentful, the `contentful-backup` plugin `save-disk` removes the associated files from the local backup. To recover entries or assets accidentally deleted on Contentful, we recommend you use `contentful-backup` and `save-disk` in conjunction with your favourite version control system. For example, run `contentful-backup` with the `save-disk` and `git-commit` plugins to save changes to a git repository and push it to a remote. (Some _mirror-my-disk-to-a-cloud_ services might work too, if they let you time travel and if they haven't silently crashed.)
 
 
 ### Caveats
@@ -24,6 +24,7 @@
 - This project may have bugs and makes no guarantees. Use it at your own risk.
 - This project uses the Contentful JavaScript API, and is subject to the whims of that API.
 - This project is not associated with Contentful.
+- This project supports Node 8 and above.
 
 
 ## Installation
@@ -42,14 +43,14 @@ $ contentful-backup
     [--dir <target-dir>]
     [--space <space-id> <cda-token>]...
     [--every <minutes>]
-    [--plugins [log-console | log-file | git-commit | <module-name>]...]
+    [--plugins [save-disk | log-console | log-file | git-commit | <module-name>]...]
 ```
 
 Backs up the space or spaces specified into the target directory (which must already exist, and defaults to the current directory). A token must be a valid Content Delivery API token for the preceding space id.
 
 Specify `--every` to automatically back up the spaces periodically. In this mode, the app does a backup run, sleeps for the defined period, then repeats: the app never exits.
 
-Specify `--plugins` with a list of plugin names to add these plugins, in order. Use a path (absolute, or relative to the target or current directory) or module name to add a node module as a plugin. See below for the built-in plugins.
+Specify `--plugins` with a list of plugin names to use these plugins, in order. Use a path (absolute, or relative to the target or current directory) or module name to use a node module as a plugin. See below for the built-in plugins. Defaults to `save-disk log-console`. (Unless you write your own plugin to replace `save-disk`, always include that in your list otherwise nothing gets saved to disk.)
 
 Command-line arguments override options specified in any `contentful-backup` configuration file found in the target directory. In that configuration file you can also define plugin-specific options.
 
@@ -62,7 +63,7 @@ The configuration file must export or define an object complying with the type `
 
 ```ts
 type Space = { id: string, token: string };
-type PluginName = "log-console" | "log-file" | "git-commit" | string;
+type PluginName = "save-disk" | "log-console" | "log-file" | "git-commit" | string;
 type PluginConfig = Object;
 type PluginSpecLoose = PluginName;
 type PluginSpecStrict = [PluginName, PluginConfig];
@@ -85,6 +86,7 @@ Example configuration file `contentful-backup.config.json`:
     ],
     "every": 10,
     "plugins": [
+        "save-disk",
         "log-file",
         ["git-commit", { "push": true }]
     ]
@@ -100,7 +102,7 @@ $ contentful-backup --space ididididid1 tktktktktk1 --space ididididid2 tktktktk
 Backs up spaces `ididididid1` and `ididididid2` to the current directory every two minutes. Other configuration (here, plugins) would be read from a configuration file in the current directory.
 
 ```bash
-$ contentful-backup --dir ../my-backups --plugins log-file git-commit
+$ contentful-backup --dir ../my-backups --plugins save-disk log-file git-commit
 ```
 
 Backs up spaces to `../my-backups`, logs to `contentful-backup.log` in that directory, then checks in all changes. Other configuration (here, the spaces and any `every` setting) would be read from a configuration file in `../my-backups`.
@@ -112,6 +114,7 @@ These are the built-in plugins (see later for how to write your own plugin):
 
 | Name | Options | Description |
 |---|---|---|
+| `save-disk` | – | Save space and content type metadata, plus entries and assets, to disk. |
 | `log-console` | – | Log backup events to the console. |
 | `log-file` | `{ level: 'error' \| 'warn' \| 'info' \| 'verbose' \| 'debug' \| 'silly' }` | Log backup events to the file `contentful-backup.log` in the target directory, rotating log files at 1 MB. The configuration option `level` indicates how verbose the messages should be (default: `info`). |
 | `git-commit` | `{ push: boolean \| string }` | After a backup run, check changes into git, then optionally push the branch to a remote. The configuration option `push` can be `true` (push to the default remote), `false` (don't push, the default), or the name of a remote (push to that remote). |
@@ -129,17 +132,17 @@ The plugin makes no effort to recover from errors.
 
 ## Files written
 
-`contentful-backup` writes these files and directories in the target directory:
+`contentful-backup` writes these files and directories in the target directory, if the plugin shown is active:
 
-| File/directory | Description |
+| File/directory | Plugin | Description |
 |---|---|
-| `contentful-backup.log` | Audit trail of backup runs, if the plugin `log-file` is specified |
-| `<space-id>/space.json` | Space metadata |
-| `<space-id>/contentTypes.json` | Content types metadata |
-| `<space-id>/asset/<id>/data.json` | Data for a single asset |
-| `<space-id>/asset/<id>/<locale>/<filename>` | An asset file |
-| `<space-id>/entry/<id>/data.json` | Data for a single entry |
-| `<space-id>/nextSyncToken.txt` | The Contentful token indicating the most recent successful synchronisation |
+| `contentful-backup.log` | log-file | Audit trail of backup runs |
+| `<space-id>/space.json` | save-disk | Space metadata |
+| `<space-id>/contentTypes.json` | save-disk | Content types metadata |
+| `<space-id>/asset/<id>/data.json` | save-disk | Data for a single asset |
+| `<space-id>/asset/<id>/<locale>/<filename>` | save-disk | An asset file |
+| `<space-id>/entry/<id>/data.json` | save-disk | Data for a single entry |
+| `<space-id>/nextSyncToken.txt` | _always_ | The Contentful token indicating the most recent successful synchronisation |
 
 
 ## Errors
@@ -158,13 +161,15 @@ You can use `contentful-backup` programmatically as a node module. In this case,
 
 ```js
 import { ContentfulBackup } from '@avaragado/contentful';
+import somePromiseReturningFunction from 'somewhere';
 
 const cfb = new ContentfulBackup();
 
-// cfb is an EventEmitter instance: see below for all events.
+// cfb emits events and supports Promises: see below for all events.
 // Here's an example:
-cfb.on('progressContent', ({ done, total } => {
-    console.log(`Synchronised ${done}/${total}`);
+cfb.on('contentRecord', async ({ ordinal, total, record } => {
+    console.log(`Synchronising ${ordinal}/${total} id ${record.sys.id}`);
+    await somePromiseReturningFunction(record);
 }));
 
 cfb.backup({
@@ -180,26 +185,32 @@ cfb.backup({
 
 ### Events
 
-During a backup run, a `ContentfulBackup` instance emits events indicating what's going on.
-
+During a backup run, a `ContentfulBackup` instance emits events indicating what's going on, using [emittery](https://www.npmjs.com/package/emittery). This provides an interface like `EventEmitter` that supports both synchronous and asynchronous event handlers.
 
 | Event | Parameter | For each | Description |
 |---|---|---|---|
-| `beforeRun` | `void` | run | About to start a backup run to back up all configured spaces |
+| `beforeRun` | `{ dir: string, spaces: Array<{ id: string, token: string }>` | run | About to start a backup run to back up all spaces |
 | `beforeSpace` | `{ dir: string, space: string, token: string }` | space | About to back up a space, with these parameters |
-| `beforeSpaceMetadata` | `{ space: string }` | space | About to fetch metadata for the space id in the parameter |
-| `afterSpaceMetadata` | `{ space: string, result: Space }` | space | Fetched space metadata, which has been saved in `space.json` |
-| `beforeContentTypeMetadata` | `{ space: string }` | space | About to fetch content type metadata for the space id in the parameter |
-| `afterContentTypeMetadata` | `{ space: string, result: ContentTypeCollection }` | space | Fetched content type metadata, which has been saved in `contentTypes.json` |
-| `beforeContent` | `{ space: string, type: "incremental" \| "initial", lastSyncDate: ?Date }` | space | About to synchronise entries and assets for the space id in the parameter. `type` indicates the type of sync, and when `type` is `incremental` the `lastSyncDate` is the timestamp of the last successful backup of this space. |
-| `progressContent` | `{ done: number, total: number, rec?: Entry \| Asset \| DeletedEntry \| DeletedAsset, space: string, type: "incremental" \| "initial", lastSyncDate: ?Date }` | space | Synchronised `done/total`th of the changes, and just synchronised record `rec`. If `total` is zero there were no changes to synchronise (and `rec` is absent). `space`, `type` and `lastSyncDate` are as for the `beforeContent` event. |
-| `afterContent` | `{ space: string, type: "incremental" \| "initial", lastSyncDate: ?Date, result: SyncCollection }` | space | Finished synchronisation with this result, and the filesystem is up to date with all changes. `space`, `type` and `lastSyncDate` are as for the `beforeContent` event (and the date value is the same as in that event). |
-| `afterSpace` | `{ space: string, error?: Error }` | space | Finished backup of a space, and possibly failed with an error |
-| `afterRun` | `void` | run | Finished a backup run |
+| `beforeSpaceMetadata` | `{ dir: string, space: string }` | space | About to fetch metadata for the space id in the parameter |
+| `spaceMetadata` | `{ dir: string, space: string, metadata: Space }` | space | Fetched space metadata |
+| `afterSpaceMetadata` | `{ dir: string, space: string }` | space | Finished processing space metadata |
+| `beforeContentTypeMetadata` | `{ dir: string, space: string }` | space | About to fetch content type metadata for the space id in the parameter |
+| `contentTypeMetadata` | `{ dir: string, space: string, metadata: ContentTypeCollection }` | space | Fetched content type metadata` |
+| `afterContentTypeMetadata` | `{ dir: string, space: string }` | space | Finished processing content type metadata |
+| `beforeContent` | `{ dir: string, space: string, syncType: "incremental" \| "initial", lastSyncDate: ?Date }` | space | About to synchronise entries and assets for the space id in the parameter. `type` indicates the type of sync, and when `type` is `incremental` the `lastSyncDate` is the timestamp of the last successful backup of this space. |
+| `content` | `{ dir: string, space: string, syncType: "incremental" \| "initial", lastSyncDate: ?Date, content: SyncCollection }` | space | Synchronisation returned this content. `space`, `type` and `lastSyncDate` are as for the `beforeContent` event. |
+| `contentRecord` | `{ ordinal: number, total: number, record?: Entry \| Asset \| DeletedEntry \| DeletedAsset, recordType?: "Entry" \| "Asset" | "DeletedEntry" \| "DeletedAsset", dir: string, space: string, syncType: "incremental" \| "initial", lastSyncDate: ?Date }` | space | Processing record `record` of type `recordType`, the `ordinal`th of `total` records. (If `total` is zero there were no changes to synchronise and `record` and `recordType` are absent.) `space`, `type` and `lastSyncDate` are as for the `beforeContent` event. |
+| `afterContent` | `{ dir: string, space: string }` | space | Finished processing space content |
+| `afterSpace` | `{ dir: string, space: string, error?: Error }` | space | Finished backup of a space, and possibly failed with an error |
+| `afterRun` | `{ dir: string, spaces: Array<{ id: string, token: string }>` | run | Finished a backup run |
 
-(In the table, `Space`, `ContentTypeCollection`, `SyncCollection`, `Entry`, `Asset`, `DeletedEntry` and `DeletedAsset` refer to the Contentful data types in their documentation.)
+In the table:
 
-The `progressContent` event counts a change as any of these:
+- `dir` is always the target directory.
+- `space` is always a space id.
+- `Space`, `ContentTypeCollection`, `SyncCollection`, `Entry`, `Asset`, `DeletedEntry` and `DeletedAsset` refer to the Contentful data types in their documentation.
+
+The `contentRecord` event counts a change as any of these:
 
 - New or updated entry
 - New or updated asset
@@ -240,22 +251,32 @@ module.exports = shortlog;
 
 If you save this plugin to, say, `~/shortlog.js`, you can select it by passing the argument `--plugins ~/shortlog.js` to `contentful-backup`.
 
-The second parameter to the plugin matches the type `BackupSpec`:
+Plugins must conform to the `Plugin` type:
 
 ```ts
+import { ContentfulBackup } from '@avaragado/contentful';
+
 type Space = { id: string, token: string };
+type PluginConfig = Object;
+
 type BackupSpec = {
     dir: string,
     spaces: Array<Space>,
     every: ?number,
 };
+
+type Plugin = (
+    cfb: ContentfulBackup,
+    backup: BackupSpec,
+    config: PluginConfig,
+) => ContentfulBackup;
 ```
 
 The third parameter to the plugin is the configuration object defined for the plugin in the configuration file, if any. It defaults to `{}`.
 
 `contentful-backup` creates one `ContentfulBackup` instance for the lifetime of the app process. The same instance is used for each space in a single backup run, and for every backup run (if you use `--every`). If your plugin saves any state internally, be sure to initialise properly on the `beforeRun` and/or `beforeSpace` events, and clean up after yourself on `afterSpace` and/or `afterRun`.
 
-You configure plugins by defining an ordered list. The plugins are registered in that order, which means each `ContentBackup` event handler is invoked in the same order.
+You configure plugins by defining an ordered list. The plugins are registered in that order, which means each `ContentBackup` event handler is invoked in the same order. Event handlers can return promises (or use `async`/`await`) if they need to be asynchronous. Handlers are always invoked serially: a handler must finish, even if it's async, before the next one starts.
 
 Because plugins bind to `ContentfulBackup` events, some occur for each space separately. Only the `beforeRun` and `afterRun` events fire once for all spaces as a group (once per backup run, so once every `--every` period).
 

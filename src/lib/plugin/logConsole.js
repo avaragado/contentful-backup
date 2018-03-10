@@ -3,9 +3,9 @@
 import ora from 'ora';
 import { bardot } from 'bardot';
 
-import { ContentfulBackup } from '../../';
+import type { Plugin } from '../../';
 
-const log = (cfb: ContentfulBackup) => {
+const plugin: Plugin = (cfb) => {
     const spinner = ora().start();
     const bar = bardot.widthFill(20);
 
@@ -26,17 +26,17 @@ const log = (cfb: ContentfulBackup) => {
         spinner.text = `${space}: Getting content type metadata...`;
     });
 
-    cfb.on('beforeContent', ({ space, type, lastSyncDate }) => {
+    cfb.on('beforeContent', ({ space, syncType, lastSyncDate }) => {
         spinner.text = {
             initial: `${space}: No current backup found: will download entire space`,
             incremental: `${space}: Backing up changes since ${lastSyncDate}`,
-        }[type];
+        }[syncType];
     });
 
-    cfb.on('progressContent', ({ done, total, space }) => {
+    cfb.on('contentRecord', ({ ordinal, total, space }) => {
         spinner.text = (total === 0
             ? `${space}: No changes`
-            : `${space}: ${bar.current(done).maximum(total).toString()}`
+            : `${space}: ${bar.current(ordinal).maximum(total).toString()}`
         );
     });
 
@@ -60,4 +60,4 @@ const log = (cfb: ContentfulBackup) => {
     return cfb;
 };
 
-export default log;
+export default plugin;

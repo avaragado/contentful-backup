@@ -4,8 +4,7 @@ import path from 'path';
 
 import winston from 'winston';
 
-import type { BackupSpec } from '../../';
-import { ContentfulBackup } from '../../';
+import type { Plugin } from '../../';
 
 const relpathLog = 'contentful-backup.log';
 
@@ -15,7 +14,7 @@ type FilePluginConfig = {
     level: LogLevel,
 };
 
-const log = (cfb: ContentfulBackup, backup: BackupSpec, opts: FilePluginConfig) => {
+const plugin: Plugin = (cfb, backup, opts: FilePluginConfig) => {
     const logger = new (winston.Logger)({
         level: opts.level || 'info',
         transports: [
@@ -32,26 +31,26 @@ const log = (cfb: ContentfulBackup, backup: BackupSpec, opts: FilePluginConfig) 
 
     cfb.on('beforeRun', () => logger.verbose('Starting backup run'));
     cfb.on('beforeSpace', ({ space }) => logger.verbose(`${space} Backup starting`));
-    cfb.on('afterSpaceMetadata', ({ space }) => logger.verbose(`${space} Backed up metadata`));
+    cfb.on('afterSpaceMetadata', ({ space }) => logger.verbose(`${space} Backed up space metadata`));
     cfb.on('afterContentTypeMetadata', ({ space }) => logger.verbose(`${space} Backed up content type metadata`));
 
-    cfb.on('progressContent', ({ total, done, rec, space, type, lastSyncDate }) => {
+    cfb.on('contentRecord', ({ total, ordinal, record, space, syncType, lastSyncDate }) => {
         if (total === 0) {
             return logger.verbose(`Nothing has changed since ${lastSyncDate}`);
         }
 
-        if (done === 0) {
+        if (ordinal === 0) {
             logger.info({
                 initial: `${space} No current backup found: will download entire space`,
                 incremental: `${space} Backing up changes since ${lastSyncDate}`,
-            }[type]);
+            }[syncType]);
         }
 
-        if (rec) {
+        if (record) {
             return logger.info(
                 space,
-                `${done}/${total}`,
-                `${rec.sys.type} id ${rec.sys.id}`,
+                `${ordinal}/${total}`,
+                `${record.sys.type} id ${record.sys.id}`,
             );
         }
 
@@ -72,4 +71,4 @@ const log = (cfb: ContentfulBackup, backup: BackupSpec, opts: FilePluginConfig) 
     return cfb;
 };
 
-export default log;
+export default plugin;

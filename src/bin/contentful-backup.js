@@ -7,7 +7,7 @@ import 'babel-polyfill';
 import yargs from 'yargs';
 import outdent from 'outdent';
 
-import type { Space, CLIConfig, FileConfig, BackupSpec, PluginName, PluginFn, PluginSpec, PluginSpecStrict } from '../';
+import type { Space, CLIConfig, FileConfig, BackupSpec, PluginName, Plugin, PluginSpec, PluginSpecStrict } from '../';
 
 import { ContentfulBackup } from '../';
 
@@ -16,7 +16,7 @@ import * as schema from '../lib/schema';
 
 const relpathConfig = 'contentful-backup.config';
 
-const requireOrNull = (name: string): ?PluginFn => {
+const requireOrNull = (name: string): ?Plugin => {
     try {
         return require(name);
 
@@ -25,7 +25,7 @@ const requireOrNull = (name: string): ?PluginFn => {
     }
 };
 
-const requirePlugin = (name: PluginName, dir: string): ?PluginFn =>
+const requirePlugin = (name: PluginName, dir: string): ?Plugin =>
     plugin[name] ||
     requireOrNull(path.join(dir, name)) ||
     requireOrNull(path.join(process.cwd(), name)) ||
@@ -37,7 +37,7 @@ const { argv } = yargs
         $0 [--dir <target>]
            [--space <id> <token>]...
            [--every <minutes>]
-           [--plugins [log-console | log-file | git-commit | <module>]... ]
+           [--plugins [save-disk | log-console | log-file | git-commit | <module>]... ]
 
         Backs up one or more Contentful spaces into the target directory.
 
@@ -47,12 +47,13 @@ const { argv } = yargs
 
         Use --every to automatically back up the spaces periodically (the app doesn't exit).
 
-        Use --plugins with a list of plugin names to add these plugins, in order. Use a path (absolute, or relative to target or current directory) or module name to add a node module as a plugin.
+        Use --plugins with a list of plugin names to use these plugins, in order. Use a path (absolute, or relative to target or current directory) or module name to use a node module as a plugin. (Unless you write your own plugin to replace save-disk, always include that in your list otherwise nothing gets saved to disk.)
 
         Omitted arguments are read from ${relpathConfig}.{js,json} in the target directory.
 
         Built-in plugins:
 
+        - save-disk: save space and content type metadata, plus entries and assets, to disk.
         - log-console: log backup events to the console.
         - log-file: log backup events to the file contentful-backup.log in the target directory, rotating log files at 1 MB.
         - git-commit: after a successful or failed backup, check changes into git.
@@ -64,7 +65,7 @@ const { argv } = yargs
         'Backs up spaces ididididid1 and ididididid2 to the current directory every two minutes.',
     )
     .example(
-        '$0 --dir ../my-backups --plugins log-file git-commit git-commit',
+        '$0 --dir ../my-backups --plugins save-disk log-file git-commit',
         'Backs up spaces according to the configuration file in ../my-backups, and logs to contentful-backup.log in that directory, then checks in all changes.',
     )
     .options({
@@ -120,10 +121,10 @@ const { argv } = yargs
         'plugins': {
             alias: 'plugin',
             desc: outdent`
-                Ordered list of plugins to use with backups. Built-ins: log-console, log-file, git-commit. Use a custom node module by specifying the path (relative to current dir)
+                Ordered list of plugins to use with backups. Built-ins: save-disk, log-console, log-file, git-commit. Use a custom node module by specifying the path (absolute, relative to target or current dir) or module
             `,
             array: true,
-            default: [],
+            default: ['save-disk', 'log-console'],
             coerce: (pluginSpecs: Array<PluginSpec>): Array<PluginSpecStrict> =>
                 pluginSpecs.map(pluginSpec => (
                     typeof pluginSpec === 'string'
