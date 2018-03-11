@@ -42,7 +42,7 @@ class ContentfulBackup extends Emittery {
             return;
         }
 
-        let ix = 0;
+        let ix = -1;
 
         while (true) { // eslint-disable-line no-constant-condition
             // eslint-disable-next-line no-await-in-loop
