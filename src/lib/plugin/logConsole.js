@@ -57,6 +57,11 @@ const plugin: Plugin = (cfb) => {
         text: `End of backup run – ${new Date().toString()}`,
     }));
 
+    cfb.on('beforeSleep', ({ didChange, sleep }) => spinner.stopAndPersist({
+        symbol: '🕙',
+        text: `${didChange ? 'At least one space changed' : 'No spaces changed'} – sleeping for ${sleep} min...`,
+    }));
+
     return cfb;
 };
 

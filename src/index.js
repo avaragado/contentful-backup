@@ -13,7 +13,7 @@ export type PluginSpec = PluginSpecLoose | PluginSpecStrict;
 export type BackupSpec = {
     dir: string,
     spaces: Array<Space>,
-    every: ?number,
+    every: Array<number>, // empty if single run
 };
 
 export type Plugin = (
@@ -24,7 +24,7 @@ export type Plugin = (
 
 export type FileConfig = {
     spaces?: Array<Space>,
-    every?: number,
+    every?: number | Array<number>,
     plugins?: Array<PluginSpec>,
 }
 
@@ -32,7 +32,7 @@ export type CLIConfig = {
     dir: string,
     space?: Array<Space>,
     spaces?: Array<Space>,
-    every?: number,
+    every?: Array<number>,
     plugins: Array<PluginSpecStrict>,
 };
 

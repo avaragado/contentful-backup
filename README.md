@@ -14,6 +14,7 @@
 - **Incremental backup of entries and assets** Run the app at any time to keep a backup "topped up". (Space and content type metadata is downloaded in full each time.)
 - **Multiple spaces** Back up one or more spaces with a single run of the app.
 - **Once or forever** Back up once then exit – or run forever, backing up as frequently as you want.
+- **Configurable backoff** Back up more frequently when spaces are changing.
 - **Plugins** Built-in plugins for saving spaces to disk, logging to console and file, and performing post-backup git actions – with the ability to define your own plugins.
 
 **Files are deleted locally too.** When entries or assets are deleted from Contentful, the `contentful-backup` plugin `save-disk` removes the associated files from the local backup. To recover entries or assets accidentally deleted on Contentful, we recommend you use `contentful-backup` and `save-disk` in conjunction with your favourite version control system. For example, run `contentful-backup` with the `save-disk` and `git-commit` plugins to save changes to a git repository and push it to a remote. (Some _mirror-my-disk-to-a-cloud_ services might work too, if they let you time travel and if they haven't silently crashed.)
@@ -42,13 +43,13 @@ $ npm -g install @avaragado/contentful-backup
 $ contentful-backup
     [--dir <target-dir>]
     [--space <space-id> <cda-token>]...
-    [--every <minutes>]
+    [--every <minutes>...]
     [--plugins [save-disk | log-console | log-file | git-commit | <module-name>]...]
 ```
 
 Backs up the space or spaces specified into the target directory (which must already exist, and defaults to the current directory). A token must be a valid Content Delivery API token for the preceding space id.
 
-Specify `--every` to automatically back up the spaces periodically. In this mode, the app does a backup run, sleeps for the defined period, then repeats: the app never exits.
+Specify `--every` to automatically back up the spaces periodically. In this mode, the app does a backup run, sleeps for the defined period, then repeats: the app never exits. If multiple numbers are supplied, they're used for a form of exponential backoff: When content changes in a backup run, the first number in the sequence is used for the sleep period. For each backup run where content doesn't change, the next number is used, eventually repeating the last number.
 
 Specify `--plugins` with a list of plugin names to use these plugins, in order. Use a path (absolute, or relative to the target or current directory) or module name to use a node module as a plugin. See below for the built-in plugins. Defaults to `save-disk log-console`. (Unless you write your own plugin to replace `save-disk`, always include that in your list otherwise nothing gets saved to disk.)
 
@@ -71,7 +72,7 @@ type PluginSpec = PluginSpecLoose | PluginSpecStrict;
 
 type FileConfig = {
     spaces?: Array<Space>,
-    every?: number,
+    every?: number | Array<number>,
     plugins?: Array<PluginSpec>,
 }
 ```
@@ -84,7 +85,7 @@ Example configuration file `contentful-backup.config.json`:
         { "id": "abcdabcdabcd", "token": "abcdabcdabcdabcdabcdabcd" },
         { "id": "zxzxzxzxzxzx", "token": "zxzxzxzxzxzxzxzxzxzxzxzx" },
     ],
-    "every": 10,
+    "every": [1, 10, 100],
     "plugins": [
         "save-disk",
         "log-file",
@@ -96,10 +97,10 @@ Example configuration file `contentful-backup.config.json`:
 ### Examples
 
 ```bash
-$ contentful-backup --space ididididid1 tktktktktk1 --space ididididid2 tktktktktk2 --every 2
+$ contentful-backup --space ididididid1 tktktktktk1 --space ididididid2 tktktktktk2 --every 2 30
 ```
 
-Backs up spaces `ididididid1` and `ididididid2` to the current directory every two minutes. Other configuration (here, plugins) would be read from a configuration file in the current directory.
+Backs up spaces `ididididid1` and `ididididid2` to the current directory. If any content changed, the next backup starts two minutes later; if not, 30 minutes later. Other configuration (here, plugins) would be read from a configuration file in the current directory.
 
 ```bash
 $ contentful-backup --dir ../my-backups --plugins save-disk log-file git-commit
@@ -135,13 +136,13 @@ The plugin makes no effort to recover from errors.
 `contentful-backup` writes these files and directories in the target directory, if the plugin shown is active:
 
 | File/directory | Plugin | Description |
-|---|---|
-| `contentful-backup.log` | log-file | Audit trail of backup runs |
-| `<space-id>/space.json` | save-disk | Space metadata |
-| `<space-id>/contentTypes.json` | save-disk | Content types metadata |
-| `<space-id>/asset/<id>/data.json` | save-disk | Data for a single asset |
-| `<space-id>/asset/<id>/<locale>/<filename>` | save-disk | An asset file |
-| `<space-id>/entry/<id>/data.json` | save-disk | Data for a single entry |
+|---|---|---|
+| `contentful-backup.log` | `log-file` | Audit trail of backup runs |
+| `<space-id>/space.json` | `save-disk` | Space metadata |
+| `<space-id>/contentTypes.json` | `save-disk` | Content types metadata |
+| `<space-id>/asset/<id>/data.json` | `save-disk` | Data for a single asset |
+| `<space-id>/asset/<id>/<locale>/<filename>` | `save-disk` | An asset file |
+| `<space-id>/entry/<id>/data.json` | `save-disk` | Data for a single entry |
 | `<space-id>/nextSyncToken.txt` | _always_ | The Contentful token indicating the most recent successful synchronisation |
 
 
@@ -189,7 +190,7 @@ During a backup run, a `ContentfulBackup` instance emits events indicating what'
 
 | Event | Parameter | For each | Description |
 |---|---|---|---|
-| `beforeRun` | `{ dir: string, spaces: Array<{ id: string, token: string }>` | run | About to start a backup run to back up all spaces |
+| `beforeRun` | `{ dir: string, spaces: Array<{ id: string, token: string }> }` | run | About to start a backup run to back up all spaces |
 | `beforeSpace` | `{ dir: string, space: string, token: string }` | space | About to back up a space, with these parameters |
 | `beforeSpaceMetadata` | `{ dir: string, space: string }` | space | About to fetch metadata for the space id in the parameter |
 | `spaceMetadata` | `{ dir: string, space: string, metadata: Space }` | space | Fetched space metadata |
@@ -199,10 +200,11 @@ During a backup run, a `ContentfulBackup` instance emits events indicating what'
 | `afterContentTypeMetadata` | `{ dir: string, space: string }` | space | Finished processing content type metadata |
 | `beforeContent` | `{ dir: string, space: string, syncType: "incremental" \| "initial", lastSyncDate: ?Date }` | space | About to synchronise entries and assets for the space id in the parameter. `type` indicates the type of sync, and when `type` is `incremental` the `lastSyncDate` is the timestamp of the last successful backup of this space. |
 | `content` | `{ dir: string, space: string, syncType: "incremental" \| "initial", lastSyncDate: ?Date, content: SyncCollection }` | space | Synchronisation returned this content. `space`, `type` and `lastSyncDate` are as for the `beforeContent` event. |
-| `contentRecord` | `{ ordinal: number, total: number, record?: Entry \| Asset \| DeletedEntry \| DeletedAsset, recordType?: "Entry" \| "Asset" | "DeletedEntry" \| "DeletedAsset", dir: string, space: string, syncType: "incremental" \| "initial", lastSyncDate: ?Date }` | space | Processing record `record` of type `recordType`, the `ordinal`th of `total` records. (If `total` is zero there were no changes to synchronise and `record` and `recordType` are absent.) `space`, `type` and `lastSyncDate` are as for the `beforeContent` event. |
+| `contentRecord` | `{ ordinal: number, total: number, record?: Entry \| Asset \| DeletedEntry \| DeletedAsset, recordType?: "Entry" \| "Asset" \| "DeletedEntry" \| "DeletedAsset", dir: string, space: string, syncType: "incremental" \| "initial", lastSyncDate: ?Date }` | space | Processing record `record` of type `recordType`, the `ordinal`th of `total` records. (If `total` is zero there were no changes to synchronise and `record` and `recordType` are absent.) `space`, `type` and `lastSyncDate` are as for the `beforeContent` event. |
 | `afterContent` | `{ dir: string, space: string }` | space | Finished processing space content |
 | `afterSpace` | `{ dir: string, space: string, error?: Error }` | space | Finished backup of a space, and possibly failed with an error |
 | `afterRun` | `{ dir: string, spaces: Array<{ id: string, token: string }>` | run | Finished a backup run |
+| `beforeSleep` | `{ dir: string, spaces: Array<{ id: string, token: string }>, didChange: boolean, sleep: number }` | run | About to sleep between backup runs. `didChange` is true if any space content changed in the last backup, and false otherwise. `sleep` is the number of minutes until the next backup run. |
 
 In the table:
 
@@ -220,9 +222,13 @@ The `contentRecord` event counts a change as any of these:
 
 ## Questions
 
-### What's a good value for `--every`?
+### What value should I use for `--every`?
 
-It's up to you. If your CMS is changing constantly, you may want a smaller value for `--every`.
+It's up to you. Something like `--every 1 2 5 10 30 60` covers many bases:
+
+- While content is changing constantly, backup runs take place every minute.
+- As soon as content stops changing, backup runs take place less frequently: after two minutes, then five, then ten, and so on.
+- When content starts changing again, backup runs will occur every minute once more.
 
 Bear in mind that every backup downloads space and content type metadata in full: even if your CMS entries and assets change rarely, each backup may still result in a hefty chunk of download.
 
@@ -262,7 +268,7 @@ type PluginConfig = Object;
 type BackupSpec = {
     dir: string,
     spaces: Array<Space>,
-    every: ?number,
+    every: Array<number>, // empty if single run
 };
 
 type Plugin = (

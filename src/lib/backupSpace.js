@@ -21,7 +21,7 @@ type RecordSpec = {
 
 type Emitter = (event: string, arg: Object) => Promise<void>;
 
-type BackupSpace = { emit: Emitter, dir: string, space: string, token: string } => Promise<void>;
+type BackupSpace = { emit: Emitter, dir: string, space: string, token: string } => Promise<boolean>;
 
 
 // we process each record serially, so we don't clobber the contentful API
@@ -38,7 +38,7 @@ const processSyncRecordSpecs = async (emit, ordinal, recordSpecs) => {
     return processSyncRecordSpecs(emit, ordinal + 1, recordSpecsRest);
 };
 
-const processSyncCollection = async (emit, content, dir, space, syncType, lastSyncDate) => {
+const processSyncCollection = async (emit, content, dir, space, syncType, lastSyncDate): Promise<boolean> => {
     const { entries, assets, deletedEntries, deletedAssets } = content;
     const total = [entries, assets, deletedEntries, deletedAssets]
         .reduce((acc, item) => acc + item.length, 0);
@@ -46,7 +46,7 @@ const processSyncCollection = async (emit, content, dir, space, syncType, lastSy
 
     if (total === 0) {
         await emit('contentRecord', { ...recordSpecBase, ordinal: 0 });
-        return;
+        return false;
     }
 
     const recordSpecs = []
@@ -56,9 +56,11 @@ const processSyncCollection = async (emit, content, dir, space, syncType, lastSy
         .concat(deletedAssets.map(record => ({ ...recordSpecBase, record, recordType: 'DeletedAsset' })));
 
     await processSyncRecordSpecs(emit, 1, recordSpecs);
+
+    return true;
 };
 
-const syncContent = async (emit, cfClient, dir, space) => {
+const syncContent = async (emit, cfClient, dir, space): Promise<boolean> => {
     const dirSpace = path.resolve(dir, space);
 
     const { nextSyncToken, lastSyncDate } = await synctoken.load(dirSpace);
@@ -72,11 +74,13 @@ const syncContent = async (emit, cfClient, dir, space) => {
 
     await emit('content', { dir, space, syncType, lastSyncDate, content });
 
-    await processSyncCollection(emit, content, dir, space, syncType, lastSyncDate);
+    const didChange = await processSyncCollection(emit, content, dir, space, syncType, lastSyncDate);
 
     await emit('afterContent', { dir, space });
 
     await synctoken.save(dirSpace, content.nextSyncToken);
+
+    return didChange;
 };
 
 const fetchMetaContentTypes = async (emit, cfClient, dir, space) => {
@@ -105,12 +109,15 @@ const backupSpace: BackupSpace = async ({ emit, dir, space, token }) => {
     try {
         await fetchMetaSpace(emit, cfClient, dir, space);
         await fetchMetaContentTypes(emit, cfClient, dir, space);
-        await syncContent(emit, cfClient, dir, space);
+        const didChange = await syncContent(emit, cfClient, dir, space);
 
         await emit('afterSpace', { dir, space });
 
+        return didChange;
+
     } catch (error) {
         await emit('afterSpace', { dir, space, error });
+        return true; // next backup will occur quickly if exponential backup configured
     }
 };
 

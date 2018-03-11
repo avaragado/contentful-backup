@@ -36,7 +36,7 @@ const { argv } = yargs
     .usage(outdent`
         $0 [--dir <target>]
            [--space <id> <token>]...
-           [--every <minutes>]
+           [--every <minutes>...]
            [--plugins [save-disk | log-console | log-file | git-commit | <module>]... ]
 
         Backs up one or more Contentful spaces into the target directory.
@@ -45,7 +45,7 @@ const { argv } = yargs
 
         Use --space to specify the space id and CDA token pair of each space you want to back up.
 
-        Use --every to automatically back up the spaces periodically (the app doesn't exit).
+        Use --every to automatically back up the spaces periodically (the app doesn't exit). Use multiple numbers for exponential backoff.
 
         Use --plugins with a list of plugin names to use these plugins, in order. Use a path (absolute, or relative to target or current directory) or module name to use a node module as a plugin. (Unless you write your own plugin to replace save-disk, always include that in your list otherwise nothing gets saved to disk.)
 
@@ -61,8 +61,8 @@ const { argv } = yargs
         The git-commit plugin assumes the target directory is a valid git repository in which the user running the app has commit and push permissions on the current branch, and that git is in the PATH. The plugin makes no effort to recover from errors.
     `)
     .example(
-        '$0 --space ididididid1 tktktktktk1 --space ididididid2 tktktktktk2 --every 2',
-        'Backs up spaces ididididid1 and ididididid2 to the current directory every two minutes.',
+        '$0 --space ididididid1 tktktktktk1 --space ididididid2 tktktktktk2 --every 2 30',
+        'Backs up spaces ididididid1 and ididididid2 to the current directory every two minutes if content is changing, 30 minutes otherwise.',
     )
     .example(
         '$0 --dir ../my-backups --plugins save-disk log-file git-commit',
@@ -114,9 +114,10 @@ const { argv } = yargs
         },
         'every': {
             desc: outdent`
-                How frequently to back up, in minutes (app never exits)
+                How frequently to back up, in minutes (app never exits). Use several numbers for exponential backoff
             `,
-            number: true,
+            array: true,
+            coerce: val => (Array.isArray(val) ? val : [val]),
         },
         'plugins': {
             alias: 'plugin',
@@ -153,7 +154,7 @@ const { argv } = yargs
 const backup: BackupSpec = {
     dir: argv.dir,
     spaces: argv.space || argv.spaces,
-    every: argv.every || null,
+    every: argv.every || [],
 };
 
 const cfb = argv.plugins

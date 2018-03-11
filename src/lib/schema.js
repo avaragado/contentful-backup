@@ -22,9 +22,15 @@ const plugin = yup.mixed().test(
     val => pluginLoose.isValidSync(val) || pluginStrict.isValidSync(val),
 );
 
+const every = yup.mixed().test(
+    'every',
+    'The "every" setting must be a number or a list of numbers',
+    val => yup.number().isValidSync(val) || yup.array().of(yup.number()),
+);
+
 const configFile = yup.object().shape({
     spaces: yup.array().of(space),
-    every: yup.number(),
+    every,
     plugins: yup.array().of(plugin),
 });
 
@@ -32,7 +38,7 @@ const configCLI = yup.object().shape({
     dir: yup.string(),
     space: yup.array().of(space),
     spaces: yup.array().of(space),
-    every: yup.number(),
+    every: yup.array().of(yup.number()),
     plugins: yup.array().of(pluginStrict),
 }).test(
     'spaces',

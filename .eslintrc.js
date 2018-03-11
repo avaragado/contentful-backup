@@ -15,6 +15,19 @@ module.exports = {
 
     // overrides the airbnb ruleset
     rules: {
+        'max-len': [
+            'error',
+            {
+                'code': 200,
+                'tabWidth': 4,
+                'ignoreUrls': true,
+                'ignoreComments': false,
+                'ignoreRegExpLiterals': true,
+                'ignoreStrings': true,
+                'ignoreTemplateLiterals': true
+            }
+          ],
+
         // 4-space indent
         'indent': ['error', 4, { SwitchCase: 1 }],
 

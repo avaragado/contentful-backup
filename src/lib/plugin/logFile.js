@@ -68,6 +68,9 @@ const plugin: Plugin = (cfb, backup, opts: FilePluginConfig) => {
 
     cfb.on('afterRun', () => logger.verbose('End of backup run'));
 
+    cfb.on('beforeSleep', ({ didChange, sleep }) => logger
+        .verbose(`${didChange ? 'At least one space changed' : 'No spaces changed'} – sleeping for ${sleep} min...`));
+
     return cfb;
 };
 
