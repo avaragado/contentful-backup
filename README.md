@@ -18,13 +18,11 @@
 - **Configurable backoff** Back up more frequently when spaces are changing.
 - **Plugins** Built-in plugins for saving spaces to disk, logging to console and file, and performing post-backup git actions – with the ability to define your own plugins.
 
-**Files are deleted locally too.** When entries or assets are deleted from Contentful, the `contentful-backup` plugin `save-disk` removes the associated files from the local backup. To recover entries or assets accidentally deleted on Contentful, we recommend you use `contentful-backup` and `save-disk` in conjunction with your favourite version control system. For example, run `contentful-backup` with the `save-disk` and `git-commit` plugins to save changes to a git repository and push it to a remote. (Some _mirror-my-disk-to-a-cloud_ services might work too, if they let you time travel and if they haven't silently crashed.)
-
 
 ### Caveats
 
 - This project may have bugs and makes no guarantees. Use it at your own risk.
-- This project uses the Contentful JavaScript API, and is subject to the whims of that API.
+- This project uses the Contentful JavaScript API, and is subject to the whims of that API. In particular, the synchronisation API only retrieves published entries and assets, and not those in draft, changed/updated or archived states.
 - This project is not associated with Contentful.
 - This project supports Node 8 and above.
 
@@ -93,7 +91,7 @@ Some plugins accept configuration options. To set these, specify plugins in a co
 
 Define default `contentful-backup` configuration in a file named `contentful-backup.config.js` or `contentful-backup.config.json` in the target directory. Command-line arguments override this configuration.
 
-The configuration file must export or define an object complying with the type `FileConfig`:
+The configuration file must export or define an object of type `FileConfig`:
 
 ```ts
 type SpaceIdToken = { id: string, token: string };
@@ -137,7 +135,18 @@ Example configuration file `contentful-backup.config.json`:
 
 Saves space and content type metadata, plus entries and assets. All data is stored in a subdirectory (whose name is the space ID) of the target directory.
 
-_No plugin options_
+In the configuration file, you can specify a plugin options object matching this type:
+
+```ts
+type SaveDiskPluginOptions = {
+    onDeletedEntry?: 'delete' | 'move',
+    onDeletedAsset?: 'delete' | 'move',
+};
+```
+
+- `onDeletedEntry` and `onDeletedAsset` indicate the action the plugin should take for `DeletedEntry` and `DeletedAsset` records in Contentful's synchronisation response. Use `move` (the default) to move deleted entries and assets to a `deleted` subdirectory, with a timestamp of deletion. Use `delete` to simply delete the local files (best used in conjunction with the `git-commit` plugin, so each commit reflects the state of the space at that time).
+
+Note that in the Contentful synchronisation API, "deleted" entries or assets include those whose state changes from 'published' to 'draft' or 'archived'. If you archive an entry or asset, the next `contentful-backup` run will delete it or move it to the `deleted` subdirectory according to the appropriate plugin option. If you then republish the entry or asset, the next backup run will recreate it as if new (leaving the `deleted` directory unchanged: the record remains there).
 
 
 #### log-console
@@ -229,12 +238,12 @@ Plugins must conform to the `Plugin` type:
 ```ts
 import { ContentfulBackup } from '@avaragado/contentful';
 
-type Space = { id: string, token: string };
+type SpaceIdToken = { id: string, token: string };
 type PluginConfig = Object;
 
 type BackupSpec = {
     dir: string,
-    spaces: Array<Space>,
+    spaces: Array<SpaceIdToken>,
     every: Array<number>, // empty if single run
 };
 
@@ -289,6 +298,7 @@ The `contentRecord` event counts a change as any of these:
 - Deleted entry
 - Deleted asset
 
+Contentful's definition of 'deleted' here includes those entries or assets changed from 'published' to 'draft' or 'archived'.
 
 
 
@@ -352,6 +362,7 @@ cfb.backup({
 | `<space-id>/asset/<id>/data.json` | `save-disk` | Data for a single asset |
 | `<space-id>/asset/<id>/<locale>/<filename>` | `save-disk` | An asset file |
 | `<space-id>/entry/<id>/data.json` | `save-disk` | Data for a single entry |
+| `<space-id>/deleted/<yyyy-mm-ddThh-mm-ss>/...` | `save-disk` | When moving deleted entries/assets, data deleted at the timestamp |
 | `<space-id>/nextSyncToken.txt` | _always_ | The Contentful token indicating the most recent successful synchronisation |
 
 

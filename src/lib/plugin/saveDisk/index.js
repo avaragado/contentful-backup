@@ -13,6 +13,13 @@ import { process as processAsset } from './processAsset';
 import { process as processDeletedEntry } from './processDeletedEntry';
 import { process as processDeletedAsset } from './processDeletedAsset';
 
+type DeleteOption = 'delete' | 'move';
+
+export type SaveDiskPluginOptions = {
+    onDeletedEntry?: DeleteOption,
+    onDeletedAsset?: DeleteOption,
+};
+
 const writeFile = promisify(fs.writeFile);
 const mkdir = promisify(mkdirp);
 
@@ -25,7 +32,13 @@ const processor = {
     'DeletedAsset': processDeletedAsset,
 };
 
-const plugin: Plugin = (cfb) => {
+const plugin: Plugin = (cfb, backup, opts: SaveDiskPluginOptions) => {
+    let timestamp;
+
+    cfb.on('beforeRun', async () => {
+        timestamp = new Date().toISOString().replace(/:/g, '-').slice(0, -5);
+    });
+
     cfb.on('beforeSpace', async ({ dir, space }) => {
         const dirSpace = path.resolve(dir, space);
 
@@ -39,7 +52,7 @@ const plugin: Plugin = (cfb) => {
 
     cfb.on('contentRecord', async ({ dir, space, record, recordType }) => {
         if (record) {
-            await processor[recordType](path.resolve(dir, space), record);
+            await processor[recordType](path.resolve(dir, space), record, opts, timestamp);
         }
     });
 
