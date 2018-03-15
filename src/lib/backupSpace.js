@@ -2,22 +2,70 @@
 
 import path from 'path';
 
-import type { ContentfulClientApi, SyncCollection, Entry, Asset, DeletedEntry, DeletedAsset } from 'contentful';
+import type { ContentfulClientApi, Space, ContentTypeCollection, SyncCollection, Entry, Asset, DeletedEntry, DeletedAsset } from 'contentful';
 
 import { createClient } from 'contentful';
 
 import * as synctoken from './synctoken';
 
 type SyncType = 'initial' | 'incremental';
-type RecordSpec = {
+
+type DirSpace = {|
+    dir: string,
+    space: string,
+|};
+
+export type BeforeSpaceEvent = {|
+    ...DirSpace,
+    token: string,
+|};
+
+export type AfterSpaceEvent = {|
+    ...DirSpace,
+    error?: Error,
+|};
+
+export type BeforeSpaceMetadataEvent = DirSpace;
+
+export type SpaceMetadataEvent = {|
+    ...BeforeSpaceMetadataEvent,
+    metadata: Space,
+|};
+
+export type AfterSpaceMetadataEvent = BeforeSpaceMetadataEvent;
+
+export type BeforeContentTypeMetadataEvent = DirSpace;
+
+export type ContentTypeMetadataEvent = {|
+    ...BeforeContentTypeMetadataEvent,
+    metadata: ContentTypeCollection,
+|};
+
+export type AfterContentTypeMetadataEvent = BeforeContentTypeMetadataEvent;
+
+export type BeforeContentEvent = {|
+    ...DirSpace,
+    syncType: SyncType,
+    lastSyncDate: ?Date,
+|};
+
+export type ContentEvent = {|
+    ...BeforeContentEvent,
+    content: SyncCollection,
+|};
+
+export type ContentRecordEvent = {|
+    ordinal: number,
     total: number,
-    record?: Entry | Asset | DeletedEntry | DeletedAsset,
-    recordType?: 'Entry' | 'Asset' | 'DeletedEntry' | 'DeletedAsset',
     dir: string,
     space: string,
     syncType: SyncType,
     lastSyncDate: ?Date,
-};
+    record?: Entry | Asset | DeletedEntry | DeletedAsset,
+    recordType?: 'Entry' | 'Asset' | 'DeletedEntry' | 'DeletedAsset',
+|};
+
+export type AfterContentEvent = BeforeContentEvent;
 
 type Emitter = (event: string, arg: Object) => Promise<void>;
 
@@ -33,7 +81,7 @@ const processSyncRecordSpecs = async (emit, ordinal, recordSpecs) => {
 
     const [recordSpec, ...recordSpecsRest] = recordSpecs;
 
-    await emit('contentRecord', { ordinal, ...recordSpec });
+    await emit('contentRecord', ({ ordinal, ...recordSpec }: ContentRecordEvent));
 
     return processSyncRecordSpecs(emit, ordinal + 1, recordSpecsRest);
 };
@@ -42,18 +90,17 @@ const processSyncCollection = async (emit, content, dir, space, syncType, lastSy
     const { entries, assets, deletedEntries, deletedAssets } = content;
     const total = [entries, assets, deletedEntries, deletedAssets]
         .reduce((acc, item) => acc + item.length, 0);
-    const recordSpecBase: RecordSpec = { total, dir, space, syncType, lastSyncDate };
 
     if (total === 0) {
-        await emit('contentRecord', { ...recordSpecBase, ordinal: 0 });
+        await emit('contentRecord', ({ ordinal: 0, total, dir, space, syncType, lastSyncDate }: ContentRecordEvent));
         return false;
     }
 
     const recordSpecs = []
-        .concat(entries.map(record => ({ ...recordSpecBase, record, recordType: 'Entry' })))
-        .concat(assets.map(record => ({ ...recordSpecBase, record, recordType: 'Asset' })))
-        .concat(deletedEntries.map(record => ({ ...recordSpecBase, record, recordType: 'DeletedEntry' })))
-        .concat(deletedAssets.map(record => ({ ...recordSpecBase, record, recordType: 'DeletedAsset' })));
+        .concat(entries.map(record => ({ total, dir, space, syncType, lastSyncDate, record, recordType: 'Entry' })))
+        .concat(assets.map(record => ({ total, dir, space, syncType, lastSyncDate, record, recordType: 'Asset' })))
+        .concat(deletedEntries.map(record => ({ total, dir, space, syncType, lastSyncDate, record, recordType: 'DeletedEntry' })))
+        .concat(deletedAssets.map(record => ({ total, dir, space, syncType, lastSyncDate, record, recordType: 'DeletedAsset' })));
 
     await processSyncRecordSpecs(emit, 1, recordSpecs);
 
@@ -65,18 +112,18 @@ const syncContent = async (emit, cfClient, dir, space): Promise<boolean> => {
 
     const { nextSyncToken, lastSyncDate } = await synctoken.load(dirSpace);
 
-    const syncType = nextSyncToken ? 'incremental' : 'initial';
+    const syncType: SyncType = nextSyncToken ? 'incremental' : 'initial';
     const opts = nextSyncToken ? { nextSyncToken } : { initial: true, resolveLinks: false };
 
-    await emit('beforeContent', { dir, space, syncType, lastSyncDate });
+    await emit('beforeContent', ({ dir, space, syncType, lastSyncDate }: BeforeContentEvent));
 
     const content: SyncCollection = await cfClient.sync(opts);
 
-    await emit('content', { dir, space, syncType, lastSyncDate, content });
+    await emit('content', ({ dir, space, syncType, lastSyncDate, content }: ContentEvent));
 
     const didChange = await processSyncCollection(emit, content, dir, space, syncType, lastSyncDate);
 
-    await emit('afterContent', { dir, space });
+    await emit('afterContent', ({ dir, space, syncType, lastSyncDate }: AfterContentEvent));
 
     await synctoken.save(dirSpace, content.nextSyncToken);
 
@@ -84,25 +131,25 @@ const syncContent = async (emit, cfClient, dir, space): Promise<boolean> => {
 };
 
 const fetchMetaContentTypes = async (emit, cfClient, dir, space) => {
-    await emit('beforeContentTypeMetadata', { dir, space });
+    await emit('beforeContentTypeMetadata', ({ dir, space }: BeforeContentTypeMetadataEvent));
 
     const metadata = await cfClient.getContentTypes();
 
-    await emit('contentTypeMetadata', { dir, space, metadata });
-    await emit('afterContentTypeMetadata', { dir, space });
+    await emit('contentTypeMetadata', ({ dir, space, metadata }: ContentTypeMetadataEvent));
+    await emit('afterContentTypeMetadata', ({ dir, space }: AfterContentTypeMetadataEvent));
 };
 
 const fetchMetaSpace = async (emit, cfClient, dir, space) => {
-    await emit('beforeSpaceMetadata', { dir, space });
+    await emit('beforeSpaceMetadata', ({ dir, space }: BeforeSpaceMetadataEvent));
 
-    const metadata = await cfClient.getSpace();
+    const metadata: Space = await cfClient.getSpace();
 
-    await emit('spaceMetadata', { dir, space, metadata });
-    await emit('afterSpaceMetadata', { dir, space });
+    await emit('spaceMetadata', ({ dir, space, metadata }: SpaceMetadataEvent));
+    await emit('afterSpaceMetadata', ({ dir, space }: AfterSpaceMetadataEvent));
 };
 
 const backupSpace: BackupSpace = async ({ emit, dir, space, token }) => {
-    await emit('beforeSpace', { dir, space, token });
+    await emit('beforeSpace', ({ dir, space, token }: BeforeSpaceEvent));
 
     const cfClient: ContentfulClientApi = createClient({ space, accessToken: token });
 
@@ -111,12 +158,12 @@ const backupSpace: BackupSpace = async ({ emit, dir, space, token }) => {
         await fetchMetaContentTypes(emit, cfClient, dir, space);
         const didChange = await syncContent(emit, cfClient, dir, space);
 
-        await emit('afterSpace', { dir, space });
+        await emit('afterSpace', ({ dir, space }: AfterSpaceEvent));
 
         return didChange;
 
     } catch (error) {
-        await emit('afterSpace', { dir, space, error });
+        await emit('afterSpace', ({ dir, space, error }: AfterSpaceEvent));
         return true; // next backup will occur quickly if exponential backup configured
     }
 };

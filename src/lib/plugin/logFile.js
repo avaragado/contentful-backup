@@ -10,11 +10,11 @@ const relpathLog = 'contentful-backup.log';
 
 type LogLevel = 'error' | 'warn' | 'info' | 'verbose' | 'debug' | 'silly';
 
-type FilePluginConfig = {
+export type LogFilePluginOptions = {
     level: LogLevel,
 };
 
-const plugin: Plugin = (cfb, backup, opts: FilePluginConfig) => {
+const plugin: Plugin = (cfb, backup, opts: LogFilePluginOptions) => {
     const logger = new (winston.Logger)({
         level: opts.level || 'info',
         transports: [

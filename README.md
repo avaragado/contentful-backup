@@ -94,17 +94,17 @@ Define default `contentful-backup` configuration in a file named `contentful-bac
 The configuration file must export or define an object of type `FileConfig`:
 
 ```ts
-type SpaceIdToken = { id: string, token: string };
+type SpaceConfig = { id: string, token: string };
 type PluginName = "save-disk" | "log-console" | "log-file" | "git-commit" | string;
-type PluginConfig = Object;
-type PluginSpecLoose = PluginName;
-type PluginSpecStrict = [PluginName, PluginConfig];
-type PluginSpec = PluginSpecLoose | PluginSpecStrict;
+type PluginOptions = Object;
+type PluginConfigSimple = PluginName;
+type PluginConfigStrict = [PluginName, PluginOptions];
+type PluginConfig = PluginConfigSimple | PluginConfigStrict;
 
 type FileConfig = {
-    spaces?: Array<SpaceIdToken>,
+    spaces?: Array<SpaceConfig>,
     every?: number | Array<number>,
-    plugins?: Array<PluginSpec>,
+    plugins?: Array<PluginConfig>,
 }
 ```
 
@@ -209,6 +209,16 @@ $ contentful-backup --dir ../my-backups --plugins save-disk log-file git-commit
 Backs up spaces to `../my-backups`, logs to `contentful-backup.log` in that directory, then checks in all changes. Other configuration (here, the spaces and any `every` setting) would be read from a configuration file in `../my-backups`.
 
 
+### Errors
+
+- Any error that occurs during the backup of a space, such as a network glitch, skips the rest of the backup for that space but doesn't exit the app. For example, imagine you've configured `contentful-backup` to back up two spaces in each backup run, and perform a backup run `--every 60` minutes. If an error occurs while fetching the content type information of the first space, then the app won't try to back up entries and assets for that space. Instead, it'll skip to backing up the second space, then wait 60 minutes before starting another backup run for both spaces.
+- Use the `log-file` and/or `log-console` plugins to record details of any errors.
+- Use the `git-commit` plugin to include error details in the commit log.
+- You could write a plugin to notify a human or friendly droid when an error occurs.
+- If an error occurs before `contentful-backup` finishes synchronising entries and assets, the app doesn't save the next synchronisation token. This means the next backup run reruns the synchronisation that failed (in other words, you shouldn't lose anything).
+- If you don't trust a particular incremental backup, remove the `<space-id>` subdirectory of the target directory: the next backup run will trigger a full backup of that space.
+
+
 ## Writing custom plugins
 
 You can write your own plugin to replace or augment the built-in plugins.
@@ -238,23 +248,23 @@ Plugins must conform to the `Plugin` type:
 ```ts
 import { ContentfulBackup } from '@avaragado/contentful';
 
-type SpaceIdToken = { id: string, token: string };
-type PluginConfig = Object;
+type SpaceConfig = { id: string, token: string };
+type PluginOptions = Object;
 
-type BackupSpec = {
+type BackupConfig = {
     dir: string,
-    spaces: Array<SpaceIdToken>,
+    spaces: Array<SpaceConfig>,
     every: Array<number>, // empty if single run
 };
 
 type Plugin = (
     cfb: ContentfulBackup,
-    backup: BackupSpec,
-    config: PluginConfig,
+    backup: BackupConfig,
+    opts: PluginOptions,
 ) => ContentfulBackup;
 ```
 
-The third parameter to the plugin is the configuration object defined for the plugin in the configuration file, if any. It defaults to `{}`.
+The third parameter to the plugin is the plugin options object defined in the configuration file, if any. It defaults to `{}`.
 
 `contentful-backup` creates one `ContentfulBackup` instance for the lifetime of the app process. The same instance is used for each space in a single backup run, and for every backup run (if you use `--every`). If your plugin saves any state internally, be sure to initialise properly on the `beforeRun` and/or `beforeSpace` events, and clean up after yourself on `afterSpace` and/or `afterRun`.
 
@@ -280,7 +290,7 @@ During a backup run, a `ContentfulBackup` instance emits events indicating what'
 | `beforeContent` | `{ dir: string, space: string, syncType: "incremental" \| "initial", lastSyncDate: ?Date }` | space | About to synchronise entries and assets for the space id in the parameter. `type` indicates the type of sync, and when `type` is `incremental` the `lastSyncDate` is the timestamp of the last successful backup of this space. |
 | `content` | `{ dir: string, space: string, syncType: "incremental" \| "initial", lastSyncDate: ?Date, content: SyncCollection }` | space | Synchronisation returned this content. `space`, `type` and `lastSyncDate` are as for the `beforeContent` event. |
 | `contentRecord` | `{ ordinal: number, total: number, record?: Entry \| Asset \| DeletedEntry \| DeletedAsset, recordType?: "Entry" \| "Asset" \| "DeletedEntry" \| "DeletedAsset", dir: string, space: string, syncType: "incremental" \| "initial", lastSyncDate: ?Date }` | space | Processing record `record` of type `recordType`, the `ordinal`th of `total` records. (If `total` is zero there were no changes to synchronise and `record` and `recordType` are absent.) `space`, `type` and `lastSyncDate` are as for the `beforeContent` event. |
-| `afterContent` | `{ dir: string, space: string }` | space | Finished processing space content |
+| `afterContent` | `{ dir: string, space: string, syncType: "incremental" \| "initial", lastSyncDate: ?Date }` | space | Finished processing space content |
 | `afterSpace` | `{ dir: string, space: string, error?: Error }` | space | Finished backup of a space, and possibly failed with an error |
 | `afterRun` | `{ dir: string, spaces: Array<{ id: string, token: string }>` | run | Finished a backup run |
 | `beforeSleep` | `{ dir: string, spaces: Array<{ id: string, token: string }>, didChange: boolean, sleep: number }` | run | About to sleep between backup runs. `didChange` is true if any space content changed in the last backup, and false otherwise. `sleep` is the number of minutes until the next backup run. |
@@ -289,7 +299,7 @@ In the table:
 
 - `dir` is always the target directory.
 - `space` is always a space id.
-- `Space`, `ContentTypeCollection`, `SyncCollection`, `Entry`, `Asset`, `DeletedEntry` and `DeletedAsset` refer to the Contentful data types in their documentation.
+- `Space`, `ContentTypeCollection`, `SyncCollection`, `Entry`, `Asset`, `DeletedEntry` and `DeletedAsset` refer to the data types in the [Contentful JavaScript SDK documentation](https://contentful.github.io/contentful.js/contentful/5.1.3/index.html).
 
 The `contentRecord` event counts a change as any of these:
 
@@ -299,7 +309,6 @@ The `contentRecord` event counts a change as any of these:
 - Deleted asset
 
 Contentful's definition of 'deleted' here includes those entries or assets changed from 'published' to 'draft' or 'archived'.
-
 
 
 ## Using `contentful-backup` programmatically
@@ -338,14 +347,32 @@ cfb.backup({
 });
 ```
 
-## Errors
+## Flow types
 
-- Any error that occurs during the backup of a space, such as a network glitch, skips the rest of the backup for that space but doesn't exit the app. For example, imagine you've configured `contentful-backup` to back up two spaces in each backup run, and perform a backup run `--every 60` minutes. If an error occurs while fetching the content type information of the first space, then the app won't try to back up entries and assets for that space. Instead, it'll skip to backing up the second space, then wait 60 minutes before starting another backup run for both spaces.
-- Use the `log-file` and/or `log-console` plugins to record details of any errors.
-- Use the `git-commit` plugin to include error details in the commit log.
-- You could write a plugin to notify a human or friendly droid when an error occurs.
-- If an error occurs before `contentful-backup` finishes synchronising entries and assets, the app doesn't save the next synchronisation token. This means the next backup run reruns the synchronisation that failed (in other words, you shouldn't lose anything).
-- If you don't trust a particular incremental backup, remove the `<space-id>` subdirectory of the target directory: the next backup run will trigger a full backup of that space.
+When writing plugins or using `contentful-backup` programmatically, it might be useful to import [flow](https://flow.org) types. Here's an exhaustive list of types you can import:
+
+```js
+
+import type {
+    SpaceConfig,
+
+    PluginName, PluginOptions,
+    PluginConfigSimple, PluginConfigStrict, PluginConfig,
+
+    SaveDiskPluginOptions, LogFilePluginOptions, GitCommitPluginOptions,
+
+    FileConfig, ResolvedConfig, BackupConfig,
+
+    Plugin,
+
+    BeforeSleepEvent,
+    BeforeRunEvent, AfterRunEvent,
+    BeforeSpaceEvent, AfterSpaceEvent,
+    BeforeSpaceMetadataEvent, SpaceMetadataEvent, AfterSpaceMetadataEvent,
+    BeforeContentTypeMetadataEvent, ContentTypeMetadataEvent, AfterContentTypeMetadataEvent,
+    BeforeContentEvent, ContentEvent, ContentRecordEvent, AfterContentEvent,
+} from '@avaragado/contentful-backup';
+```
 
 
 ## Questions

@@ -6,11 +6,11 @@ import type { Plugin } from '../../';
 
 const execDir = cwd => cmd => execSync(cmd, { cwd }).toString('utf-8').trim();
 
-type GitPluginConfig = {
+export type GitCommitPluginOptions = {
     push?: boolean | string,
 };
 
-const plugin: Plugin = (cfb, backup, opts: GitPluginConfig) => {
+const plugin: Plugin = (cfb, backup, opts: GitCommitPluginOptions) => {
     const exec = execDir(backup.dir);
     let errors = [];
 

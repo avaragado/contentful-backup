@@ -7,7 +7,7 @@ import 'babel-polyfill';
 import yargs from 'yargs';
 import outdent from 'outdent';
 
-import type { Space, CLIConfig, FileConfig, BackupSpec, PluginName, Plugin, PluginSpec, PluginSpecStrict } from '../';
+import type { SpaceConfig, ResolvedConfig, FileConfig, BackupConfig, PluginName, Plugin, PluginConfig, PluginConfigStrict } from '../';
 
 import { ContentfulBackup } from '../';
 
@@ -99,7 +99,7 @@ const { argv } = yargs
             `,
             array: true,
             nargs: 2,
-            coerce: (parts: Array<string>): Array<Space> => {
+            coerce: (parts: Array<string>): Array<SpaceConfig> => {
                 if (parts.length % 2 !== 0) {
                     throw new Error('You must supply a token for every space id');
                 }
@@ -126,7 +126,7 @@ const { argv } = yargs
             `,
             array: true,
             default: ['save-disk', 'log-console'],
-            coerce: (pluginSpecs: Array<PluginSpec>): Array<PluginSpecStrict> =>
+            coerce: (pluginSpecs: Array<PluginConfig>): Array<PluginConfigStrict> =>
                 pluginSpecs.map(pluginSpec => (
                     typeof pluginSpec === 'string'
                         ? [pluginSpec, {}]
@@ -149,9 +149,9 @@ const { argv } = yargs
     });
 
 // we have all the args.
-(argv: CLIConfig); // eslint-disable-line no-unused-expressions
+(argv: ResolvedConfig); // eslint-disable-line no-unused-expressions
 
-const backup: BackupSpec = {
+const backup: BackupConfig = {
     dir: argv.dir,
     spaces: argv.space || argv.spaces,
     every: argv.every || [],

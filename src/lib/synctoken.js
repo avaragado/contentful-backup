@@ -14,7 +14,12 @@ const stat = promisify(fs.stat);
 const relpathToken = 'nextSyncToken.txt';
 const abspathTokenForDir = dir => path.resolve(dir, relpathToken);
 
-type Loader = (dir: string) => Promise<{ nextSyncToken: ?string, lastSyncDate: ?Date }>;
+type LoaderResult = {|
+    nextSyncToken: ?string,
+    lastSyncDate: ?Date,
+|};
+
+type Loader = (dir: string) => Promise<LoaderResult>;
 
 const load: Loader = async (dir) => {
     const abspath = abspathTokenForDir(dir);
