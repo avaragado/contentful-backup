@@ -15,7 +15,7 @@ const rimraf = promisify(rimrafCB);
 const mkdir = promisify(mkdirp);
 
 const process = async (dir: string, entry: DeletedEntry, opts: SaveDiskPluginOptions, timestamp: string) => {
-    const opt = opts.onDeletetEntry || 'move';
+    const opt = opts.onDeletedEntry || 'move';
     const abspathSource = path.resolve(dir, 'entry', entry.sys.id);
 
     if (opt === 'delete') {
