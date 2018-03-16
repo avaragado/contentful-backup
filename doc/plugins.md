@@ -1,6 +1,6 @@
 # Writing custom plugins
 
-You can write your own plugin to replace or augment the built-in plugins.
+You can write your own plugins to replace or augment the built-in plugins.
 
 A plugin is a standard node module. It must export a function. Before starting the backup, the `contentful-backup` app calls this function, passing a `ContentfulBackup` instance and other data, and the function must return a `ContentfulBackup` instance.
 

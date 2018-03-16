@@ -171,7 +171,7 @@ type LogFilePluginOptions = {
 
 ### git-commit
 
-After a backup run, checks changes into git, then optiohnally pushes the branch to a remote.
+After a backup run, checks changes into git, then optionally pushes the branch to a remote.
 
 In the configuration file, you can specify a plugin options object matching this type:
 

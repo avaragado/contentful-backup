@@ -10,7 +10,7 @@ During a backup run, a `ContentfulBackup` instance emits events indicating what'
 | `spaceMetadata` | `{ dir: string, space: string, metadata: Space }` | space | Fetched space metadata |
 | `afterSpaceMetadata` | `{ dir: string, space: string }` | space | Finished processing space metadata |
 | `beforeContentTypeMetadata` | `{ dir: string, space: string }` | space | About to fetch content type metadata for the space id in the parameter |
-| `contentTypeMetadata` | `{ dir: string, space: string, metadata: ContentTypeCollection }` | space | Fetched content type metadata` |
+| `contentTypeMetadata` | `{ dir: string, space: string, metadata: ContentTypeCollection }` | space | Fetched content type metadata |
 | `afterContentTypeMetadata` | `{ dir: string, space: string }` | space | Finished processing content type metadata |
 | `beforeContent` | `{ dir: string, space: string, syncType: "incremental" \| "initial", lastSyncDate: ?Date }` | space | About to synchronise entries and assets for the space id in the parameter. `type` indicates the type of sync, and when `type` is `incremental` the `lastSyncDate` is the timestamp of the last successful backup of this space. |
 | `content` | `{ dir: string, space: string, syncType: "incremental" \| "initial", lastSyncDate: ?Date, content: SyncCollection }` | space | Synchronisation returned this content. `space`, `type` and `lastSyncDate` are as for the `beforeContent` event. |

@@ -1,6 +1,6 @@
 {
   "name": "@avaragado/contentful-backup",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "A console app and node module for backing up Contentful spaces",
   "keywords": [
     "contentful",
